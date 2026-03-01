@@ -43,7 +43,7 @@ const MOCK_PRICES: Record<string, { name: string, price: number, change: number 
 
 export const PortfolioProvider = ({ children }: { children: React.ReactNode }) => {
     const [trades, setTrades] = useState<Trade[]>([]);
-    const [isLoaded, setIsLoaded] = useState(false);
+    const [livePrices, setLivePrices] = useState<Record<string, { name: string, price: number, change: number }>>({});
 
     // Load from localeStorage initially
     useEffect(() => {
@@ -53,8 +53,24 @@ export const PortfolioProvider = ({ children }: { children: React.ReactNode }) =
                 setTrades(JSON.parse(saved));
             } catch (e) { }
         }
-        setIsLoaded(true);
     }, []);
+
+    // Fetch live prices from our API when needed
+    useEffect(() => {
+        if (!trades.length) return;
+        const tickers = Array.from(new Set(trades.map(t => t.ticker.toUpperCase())));
+
+        // Find tickers we haven't fetched yet
+        const toFetch = tickers.filter(t => !livePrices[t]);
+        if (!toFetch.length) return;
+
+        fetch(`/api/prices?tickers=${toFetch.join(",")}`)
+            .then(res => res.json())
+            .then(data => {
+                setLivePrices(prev => ({ ...prev, ...data }));
+            })
+            .catch(err => console.error("Failed to fetch live prices", err));
+    }, [trades, livePrices]);
 
     const addTrade = (tradeData: Omit<Trade, "id">) => {
         const newTrade: Trade = { ...tradeData, id: Date.now().toString() };
@@ -90,14 +106,17 @@ export const PortfolioProvider = ({ children }: { children: React.ReactNode }) =
         map.forEach((data, ticker) => {
             if (data.shares <= 0.000001) return; // ignore completely sold or floating-point err positions
             const costBasis = data.totalCost / data.shares;
-            const mockData = MOCK_PRICES[ticker] || { name: ticker, price: costBasis * 1.05, change: 5.0 };
+
+            // Try live prices, fallback to mock, fallback to dummy
+            const priceData = livePrices[ticker] || MOCK_PRICES[ticker] || { name: ticker, price: costBasis || 1.0, change: 0.0 };
+
             result.push({
                 ticker,
-                name: mockData.name,
+                name: priceData.name,
                 shares: data.shares,
                 costBasis,
-                currentPrice: mockData.price,
-                change: mockData.change,
+                currentPrice: priceData.price,
+                change: priceData.change,
             });
         });
 
@@ -106,11 +125,9 @@ export const PortfolioProvider = ({ children }: { children: React.ReactNode }) =
 
     const totalValue = holdings.reduce((acc, curr) => acc + (curr.shares * curr.currentPrice), 0);
 
-    // Only render children when client-side mounted to avoid hydration mismatch 
-    // since localStorage is client-only.
     return (
         <PortfolioContext.Provider value={{ trades, holdings, totalValue, addTrade }}>
-            {isLoaded ? children : <div className="min-h-screen bg-background text-foreground" />}
+            {children}
         </PortfolioContext.Provider>
     );
 };
