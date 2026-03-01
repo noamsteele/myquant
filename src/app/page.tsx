@@ -1,17 +1,11 @@
 "use client";
 
 import { TrendingUp, TrendingDown, Wallet, Activity } from "lucide-react";
-
-const holdings = [
-  { ticker: "AAPL", name: "Apple Inc.", shares: 45, price: 189.3, change: 1.2 },
-  { ticker: "BTC", name: "Bitcoin", shares: 0.15, price: 62000.5, change: -2.3 },
-  { ticker: "VTI", name: "Vanguard Total Stock", shares: 120, price: 250.1, change: 0.8 },
-  { ticker: "ETH", name: "Ethereum", shares: 4.5, price: 3100.2, change: 4.1 },
-];
+import { usePortfolio } from "@/context/PortfolioContext";
 
 export default function Dashboard() {
-  const totalValue = holdings.reduce((acc, curr) => acc + curr.shares * curr.price, 0);
-  const isPositiveDay = true;
+  const { holdings, totalValue } = usePortfolio();
+  const isPositiveDay = true; // Placeholder until real-time changes are implemented
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-24 pt-8 px-4 font-sans space-y-6">
@@ -58,27 +52,36 @@ export default function Dashboard() {
         </div>
 
         <div className="space-y-3">
-          {holdings.map((asset) => (
-            <div key={asset.ticker} className="glass rounded-2xl p-4 flex items-center justify-between active:scale-[0.98] transition-transform duration-200">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-full bg-foreground/5 flex items-center justify-center font-bold text-lg text-accent border border-glass-border">
-                  {asset.ticker[0]}
-                </div>
-                <div>
-                  <h4 className="font-semibold text-lg leading-tight">{asset.ticker}</h4>
-                  <p className="text-sm text-tab-inactive font-medium">{asset.name}</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="font-semibold text-lg leading-tight">
-                  ${(asset.price * asset.shares).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </p>
-                <div className={`flex items-center justify-end text-sm font-medium ${asset.change >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                  {asset.change >= 0 ? "+" : ""}{asset.change}%
-                </div>
-              </div>
+          {holdings.length === 0 ? (
+            <div className="glass rounded-2xl p-8 text-center border border-glass-border">
+              <p className="text-tab-inactive font-medium mb-4">You have no active holdings.</p>
+              <a href="/trade" className="inline-block bg-accent text-white px-6 py-2 rounded-full font-bold text-sm shadow-lg">
+                Log a Trade
+              </a>
             </div>
-          ))}
+          ) : (
+            holdings.map((asset) => (
+              <div key={asset.ticker} className="glass rounded-2xl p-4 flex items-center justify-between active:scale-[0.98] transition-transform duration-200">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-full bg-foreground/5 flex items-center justify-center font-bold text-lg text-accent border border-glass-border">
+                    {asset.ticker[0]}
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-lg leading-tight">{asset.ticker}</h4>
+                    <p className="text-sm text-tab-inactive font-medium">{asset.shares.toLocaleString(undefined, { maximumFractionDigits: 4 })} shares</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="font-semibold text-lg leading-tight">
+                    ${(asset.currentPrice * asset.shares).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
+                  <div className={`flex items-center justify-end text-sm font-medium ${asset.change >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                    Avg: ${(asset.costBasis).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </section>
     </div>

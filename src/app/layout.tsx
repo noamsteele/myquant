@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import BottomNav from "@/components/BottomNav";
+import { PortfolioProvider } from "@/context/PortfolioContext";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -45,10 +46,12 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen pb-20`}
       >
-        <main className="flex-1">
-          {children}
-        </main>
-        <BottomNav />
+        <PortfolioProvider>
+          <main className="flex-1">
+            {children}
+          </main>
+          <BottomNav />
+        </PortfolioProvider>
         <script
           dangerouslySetInnerHTML={{
             __html: `
