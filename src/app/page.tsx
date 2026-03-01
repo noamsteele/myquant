@@ -1,14 +1,19 @@
 "use client";
 
-import { TrendingUp, TrendingDown, Wallet, Activity } from "lucide-react";
+import { TrendingUp, TrendingDown, Wallet, Activity, Box } from "lucide-react";
 import { usePortfolio } from "@/context/PortfolioContext";
 
 export default function Dashboard() {
   const { holdings, totalValue } = usePortfolio();
-  const isPositiveDay = true; // Placeholder until real-time changes are implemented
+
+  // Calculate actual total return dynamically instead of mock placeholder
+  const totalCost = holdings.reduce((acc, curr) => acc + (curr.costBasis * curr.shares), 0);
+  const totalReturn = totalValue - totalCost;
+  const returnPercent = totalCost > 0 ? (totalReturn / totalCost) * 100 : 0;
+  const isPositiveReturn = totalReturn >= 0;
 
   return (
-    <div className="min-h-screen bg-background text-foreground pb-24 pt-8 px-4 font-sans space-y-6">
+    <div className="min-h-screen bg-background text-foreground pb-24 pt-8 px-4 font-sans space-y-8">
       <header className="flex justify-between items-center mb-2">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Portfolio</h1>
@@ -20,25 +25,28 @@ export default function Dashboard() {
       </header>
 
       {/* Main Balance Card */}
-      <section className="glass rounded-[2rem] p-6 relative overflow-hidden shadow-lg border border-glass-border">
-        {/* Decorative background glows */}
-        <div className="absolute -top-10 -right-10 w-32 h-32 bg-accent/30 rounded-full blur-3xl" />
-        <div className="absolute -bottom-10 -left-10 w-32 h-32 bg-purple-500/20 rounded-full blur-3xl" />
-
-        <div className="relative z-10">
-          <div className="flex items-center space-x-2 text-tab-inactive mb-1">
-            <Wallet size={16} />
-            <h2 className="text-sm font-medium uppercase tracking-wider">Total Balance</h2>
-          </div>
-          <p className="text-[2.75rem] leading-none font-bold mb-2">
-            ${totalValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </p>
-          <div className={`flex items-center space-x-1 text-sm font-medium ${isPositiveDay ? 'text-green-500' : 'text-red-500'}`}>
-            {isPositiveDay ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
-            <span>+$1,245.50 (2.4%)</span>
-            <span className="text-tab-inactive ml-2">Today</span>
-          </div>
+      <section className="glass rounded-[2rem] p-6 relative shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-glass-border isolate">
+        {/* Decorative background glows contained separately to avoid backdrop-filter bugs */}
+        <div className="absolute inset-0 rounded-[2rem] overflow-hidden -z-10 pointer-events-none">
+          <div className="absolute -top-10 -right-10 w-40 h-40 bg-accent/20 rounded-full blur-[40px]" />
+          <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-purple-500/15 rounded-full blur-[40px]" />
         </div>
+
+        <div className="flex items-center space-x-2 text-tab-inactive mb-2">
+          <Wallet size={16} />
+          <h2 className="text-xs font-bold uppercase tracking-widest text-[#8E8E93] dark:text-[#98989D]">Total Balance</h2>
+        </div>
+        <p className="text-[3rem] leading-none font-bold mb-3 tracking-tight">
+          ${totalValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </p>
+
+        {totalValue > 0 && (
+          <div className={`flex items-center space-x-1.5 text-sm font-semibold ${isPositiveReturn ? 'text-[#34C759]' : 'text-[#FF3B30]'}`}>
+            {isPositiveReturn ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
+            <span>{isPositiveReturn ? "+" : ""}${totalReturn.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({isPositiveReturn ? "+" : ""}{returnPercent.toFixed(2)}%)</span>
+            <span className="text-tab-inactive ml-1 font-medium">All Time</span>
+          </div>
+        )}
       </section>
 
       {/* Asset List */}
@@ -51,12 +59,18 @@ export default function Dashboard() {
           <span className="text-sm text-tab-inactive font-medium">See All</span>
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-4">
           {holdings.length === 0 ? (
-            <div className="glass rounded-2xl p-8 text-center border border-glass-border">
-              <p className="text-tab-inactive font-medium mb-4">You have no active holdings.</p>
-              <a href="/trade" className="inline-block bg-accent text-white px-6 py-2 rounded-full font-bold text-sm shadow-lg">
-                Log a Trade
+            <div className="glass rounded-[1.5rem] p-10 flex flex-col items-center justify-center text-center border border-glass-border">
+              <div className="w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center mb-4 text-accent">
+                <Box size={32} />
+              </div>
+              <h4 className="text-lg font-bold mb-2">No Active Holdings</h4>
+              <p className="text-tab-inactive text-sm font-medium mb-6 leading-relaxed">
+                Your portfolio is currently empty. Start tracking your investments by logging a trade.
+              </p>
+              <a href="/trade" className="bg-accent text-white px-8 py-3 rounded-full font-bold text-sm shadow-[0_4px_14px_rgba(0,122,255,0.4)] transition-transform hover:scale-105 active:scale-95">
+                Log Your First Trade
               </a>
             </div>
           ) : (
@@ -72,10 +86,10 @@ export default function Dashboard() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="font-semibold text-lg leading-tight">
+                  <p className="font-semibold text-[1.1rem] leading-tight">
                     ${(asset.currentPrice * asset.shares).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </p>
-                  <div className={`flex items-center justify-end text-sm font-medium ${asset.change >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                  <div className={`flex items-center justify-end text-sm font-medium ${asset.currentPrice >= asset.costBasis ? 'text-[#34C759]' : 'text-[#FF3B30]'}`}>
                     Avg: ${(asset.costBasis).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </div>
                 </div>
