@@ -30,6 +30,9 @@ type PortfolioContextType = {
     currency: "USD" | "CAD";
     setCurrency: (currency: "USD" | "CAD") => void;
     currencySymbol: string;
+    watchlist: string[];
+    addToWatchlist: (ticker: string) => void;
+    removeFromWatchlist: (ticker: string) => void;
 };
 
 const PortfolioContext = createContext<PortfolioContextType | undefined>(undefined);
@@ -49,6 +52,7 @@ export const PortfolioProvider = ({ children }: { children: React.ReactNode }) =
     const [trades, setTrades] = useState<Trade[]>([]);
     const [livePrices, setLivePrices] = useState<Record<string, { name: string, price: number, change: number }>>({});
     const [currency, setCurrency] = useState<"USD" | "CAD">("USD");
+    const [watchlist, setWatchlist] = useState<string[]>(["AAPL", "BTC-USD"]); // Default watch items
 
     // Load from localeStorage initially
     useEffect(() => {
@@ -62,6 +66,12 @@ export const PortfolioProvider = ({ children }: { children: React.ReactNode }) =
         if (savedCurrency === "CAD" || savedCurrency === "USD") {
             setCurrency(savedCurrency);
         }
+        const savedWatchlist = localStorage.getItem("myquant_watchlist");
+        if (savedWatchlist) {
+            try {
+                setWatchlist(JSON.parse(savedWatchlist));
+            } catch (e) { }
+        }
     }, []);
 
     // Persist currency preference
@@ -73,8 +83,12 @@ export const PortfolioProvider = ({ children }: { children: React.ReactNode }) =
 
     // Fetch live prices from our API when needed
     useEffect(() => {
-        if (!trades.length) return;
-        const tickers = Array.from(new Set([...trades.map(t => t.ticker.toUpperCase()), "CAD=X"]));
+        const allTickersSet = new Set([
+            ...trades.map(t => t.ticker.toUpperCase()),
+            ...watchlist.map(t => t.toUpperCase()),
+            "CAD=X"
+        ]);
+        const tickers = Array.from(allTickersSet);
 
         // Find tickers we haven't fetched yet
         const toFetch = tickers.filter(t => !livePrices[t]);
@@ -147,8 +161,22 @@ export const PortfolioProvider = ({ children }: { children: React.ReactNode }) =
 
     const totalValue = holdings.reduce((acc, curr) => acc + (curr.shares * curr.currentPrice), 0);
 
+    const addToWatchlist = (ticker: string) => {
+        if (!watchlist.includes(ticker.toUpperCase())) {
+            const next = [...watchlist, ticker.toUpperCase()];
+            setWatchlist(next);
+            localStorage.setItem("myquant_watchlist", JSON.stringify(next));
+        }
+    };
+
+    const removeFromWatchlist = (ticker: string) => {
+        const next = watchlist.filter(t => t !== ticker.toUpperCase());
+        setWatchlist(next);
+        localStorage.setItem("myquant_watchlist", JSON.stringify(next));
+    };
+
     return (
-        <PortfolioContext.Provider value={{ trades, holdings, totalValue, addTrade, currency, setCurrency, currencySymbol }}>
+        <PortfolioContext.Provider value={{ trades, holdings, totalValue, addTrade, currency, setCurrency, currencySymbol, watchlist, addToWatchlist, removeFromWatchlist }}>
             {children}
         </PortfolioContext.Provider>
     );

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import BottomNav from "@/components/BottomNav";
+import SwipeWrapper from "@/components/SwipeWrapper";
 import { PortfolioProvider } from "@/context/PortfolioContext";
 import "./globals.css";
 
@@ -47,9 +48,11 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen pb-20`}
       >
         <PortfolioProvider>
-          <main className="flex-1">
-            {children}
-          </main>
+          <SwipeWrapper>
+            <main className="flex-1">
+              {children}
+            </main>
+          </SwipeWrapper>
           <BottomNav />
         </PortfolioProvider>
         <script
