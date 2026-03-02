@@ -55,7 +55,8 @@ export default function TradeInput() {
         setShowDropdown(false);
     };
 
-    const handleSubmit = () => {
+    const handleSubmit = (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
         if (!ticker || !quantity || !price) return;
 
         addTrade({
@@ -95,7 +96,7 @@ export default function TradeInput() {
                 </button>
             </div>
 
-            <form className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4">
                 {/* Ticker Input */}
                 <div className="glass rounded-xl p-4 relative z-20 overflow-visible">
                     <label className="block text-xs font-semibold text-tab-inactive uppercase tracking-wider mb-2">
@@ -202,8 +203,7 @@ export default function TradeInput() {
 
                 {/* Submit Button */}
                 <button
-                    type="button"
-                    onClick={handleSubmit}
+                    type="submit"
                     className={`w-full py-4 mt-8 rounded-xl text-white font-bold text-lg shadow-lg active:scale-[0.98] transition-transform duration-200 ${tradeType === "BUY" ? "bg-accent shadow-accent/30" : "bg-red-500 shadow-red-500/30"
                         }`}
                 >
