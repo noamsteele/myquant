@@ -1,10 +1,15 @@
 "use client";
 
-import { TrendingUp, TrendingDown, Wallet, Activity, Box } from "lucide-react";
+import { TrendingUp, TrendingDown, Wallet, Activity, Box, RefreshCcw } from "lucide-react";
 import { usePortfolio } from "@/context/PortfolioContext";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
+
+const COLORS = ['#007aff', '#34C759', '#FF9500', '#AF52DE', '#FF3B30', '#5AC8FA'];
 
 export default function Dashboard() {
-  const { holdings, totalValue } = usePortfolio();
+  const { holdings, totalValue, currency, setCurrency, currencySymbol } = usePortfolio();
+
+  const chartData = holdings.map(h => ({ name: h.ticker, value: h.shares * h.currentPrice }));
 
   // Calculate actual total return dynamically instead of mock placeholder
   const totalCost = holdings.reduce((acc, curr) => acc + (curr.costBasis * curr.shares), 0);
@@ -19,8 +24,17 @@ export default function Dashboard() {
           <h1 className="text-3xl font-bold tracking-tight">Portfolio</h1>
           <p className="text-tab-inactive text-sm font-medium">Welcome back, Noam</p>
         </div>
-        <div className="w-10 h-10 rounded-full bg-accent/20 flex items-center justify-center border border-accent/30 shadow-[0_0_15px_rgba(0,122,255,0.3)]">
-          <UserIcon />
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setCurrency(currency === "USD" ? "CAD" : "USD")}
+            className="flex items-center gap-1.5 bg-foreground/5 hover:bg-foreground/10 px-3 py-1.5 rounded-full text-xs font-bold transition-colors border border-glass-border shadow-sm active:scale-95"
+          >
+            <RefreshCcw size={12} className="text-accent" />
+            {currency}
+          </button>
+          <div className="w-10 h-10 rounded-full bg-accent/20 flex items-center justify-center border border-accent/30 shadow-[0_0_15px_rgba(0,122,255,0.3)]">
+            <UserIcon />
+          </div>
         </div>
       </header>
 
@@ -37,17 +51,50 @@ export default function Dashboard() {
           <h2 className="text-xs font-bold uppercase tracking-widest text-[#8E8E93] dark:text-[#98989D]">Total Balance</h2>
         </div>
         <p className="text-[3rem] leading-none font-bold mb-3 tracking-tight">
-          ${totalValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          {currencySymbol}{totalValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </p>
 
         {totalValue > 0 && (
           <div className={`flex items-center space-x-1.5 text-sm font-semibold ${isPositiveReturn ? 'text-[#34C759]' : 'text-[#FF3B30]'}`}>
             {isPositiveReturn ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
-            <span>{isPositiveReturn ? "+" : ""}${totalReturn.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({isPositiveReturn ? "+" : ""}{returnPercent.toFixed(2)}%)</span>
+            <span>{isPositiveReturn ? "+" : ""}{currencySymbol}{totalReturn.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({isPositiveReturn ? "+" : ""}{returnPercent.toFixed(2)}%)</span>
             <span className="text-tab-inactive ml-1 font-medium">All Time</span>
           </div>
         )}
       </section>
+
+      {/* Allocation Chart */}
+      {holdings.length > 0 && (
+        <section className="glass rounded-[2rem] p-6 border border-glass-border">
+          <h3 className="text-xs font-bold uppercase tracking-widest text-[#8E8E93] dark:text-[#98989D] mb-4">Allocation</h3>
+          <div className="h-[180px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={chartData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={85}
+                  paddingAngle={4}
+                  dataKey="value"
+                  stroke="none"
+                  cornerRadii={4}
+                >
+                  {chartData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  formatter={(value: number) => [`${currencySymbol}${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 'Value']}
+                  contentStyle={{ backgroundColor: 'var(--card-bg)', borderRadius: '16px', border: '1px solid var(--glass-border)', backdropFilter: 'blur(20px)', boxShadow: '0 8px 30px rgba(0,0,0,0.12)' }}
+                  itemStyle={{ color: 'var(--foreground)', fontWeight: 'bold' }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </section>
+      )}
 
       {/* Asset List */}
       <section>
@@ -87,10 +134,10 @@ export default function Dashboard() {
                 </div>
                 <div className="text-right">
                   <p className="font-semibold text-[1.1rem] leading-tight">
-                    ${(asset.currentPrice * asset.shares).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {currencySymbol}{(asset.currentPrice * asset.shares).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </p>
                   <div className={`flex items-center justify-end text-sm font-medium ${asset.currentPrice >= asset.costBasis ? 'text-[#34C759]' : 'text-[#FF3B30]'}`}>
-                    Avg: ${(asset.costBasis).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    Avg: {currencySymbol}{(asset.costBasis).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </div>
                 </div>
               </div>

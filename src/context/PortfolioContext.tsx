@@ -26,6 +26,9 @@ type PortfolioContextType = {
     holdings: Holding[];
     totalValue: number;
     addTrade: (trade: Omit<Trade, "id">) => void;
+    currency: "USD" | "CAD";
+    setCurrency: (currency: "USD" | "CAD") => void;
+    currencySymbol: string;
 };
 
 const PortfolioContext = createContext<PortfolioContextType | undefined>(undefined);
@@ -44,6 +47,7 @@ const MOCK_PRICES: Record<string, { name: string, price: number, change: number 
 export const PortfolioProvider = ({ children }: { children: React.ReactNode }) => {
     const [trades, setTrades] = useState<Trade[]>([]);
     const [livePrices, setLivePrices] = useState<Record<string, { name: string, price: number, change: number }>>({});
+    const [currency, setCurrency] = useState<"USD" | "CAD">("USD");
 
     // Load from localeStorage initially
     useEffect(() => {
@@ -53,12 +57,23 @@ export const PortfolioProvider = ({ children }: { children: React.ReactNode }) =
                 setTrades(JSON.parse(saved));
             } catch (e) { }
         }
+        const savedCurrency = localStorage.getItem("myquant_currency");
+        if (savedCurrency === "CAD" || savedCurrency === "USD") {
+            setCurrency(savedCurrency);
+        }
     }, []);
+
+    // Persist currency preference
+    useEffect(() => {
+        localStorage.setItem("myquant_currency", currency);
+    }, [currency]);
+
+    const currencySymbol = currency === "CAD" ? "C$" : "$";
 
     // Fetch live prices from our API when needed
     useEffect(() => {
         if (!trades.length) return;
-        const tickers = Array.from(new Set(trades.map(t => t.ticker.toUpperCase())));
+        const tickers = Array.from(new Set([...trades.map(t => t.ticker.toUpperCase()), "CAD=X"]));
 
         // Find tickers we haven't fetched yet
         const toFetch = tickers.filter(t => !livePrices[t]);
@@ -102,6 +117,8 @@ export const PortfolioProvider = ({ children }: { children: React.ReactNode }) =
             map.set(ticker, current);
         });
 
+        const fxRate = currency === "CAD" ? (livePrices["CAD=X"]?.price || 1.35) : 1;
+
         const result: Holding[] = [];
         map.forEach((data, ticker) => {
             if (data.shares <= 0.000001) return; // ignore completely sold or floating-point err positions
@@ -114,19 +131,19 @@ export const PortfolioProvider = ({ children }: { children: React.ReactNode }) =
                 ticker,
                 name: priceData.name,
                 shares: data.shares,
-                costBasis,
-                currentPrice: priceData.price,
+                costBasis: costBasis * fxRate,
+                currentPrice: priceData.price * fxRate,
                 change: priceData.change,
             });
         });
 
         return result.sort((a, b) => (b.shares * b.currentPrice) - (a.shares * a.currentPrice));
-    }, [trades]);
+    }, [trades, livePrices, currency]);
 
     const totalValue = holdings.reduce((acc, curr) => acc + (curr.shares * curr.currentPrice), 0);
 
     return (
-        <PortfolioContext.Provider value={{ trades, holdings, totalValue, addTrade }}>
+        <PortfolioContext.Provider value={{ trades, holdings, totalValue, addTrade, currency, setCurrency, currencySymbol }}>
             {children}
         </PortfolioContext.Provider>
     );
