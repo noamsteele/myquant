@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { usePortfolio } from "@/context/PortfolioContext";
 
@@ -14,6 +14,46 @@ export default function TradeInput() {
     const [price, setPrice] = useState("");
     const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
     const [platform, setPlatform] = useState("Questrade");
+
+    const [searchResults, setSearchResults] = useState<{ id: string, name: string, symbol: string, thumb: string }[]>([]);
+    const [isSearching, setIsSearching] = useState(false);
+    const [showDropdown, setShowDropdown] = useState(false);
+
+    // CoinGecko Search API Debounce
+    useEffect(() => {
+        const fetchAssets = async () => {
+            if (ticker.trim().length < 2) {
+                setSearchResults([]);
+                setShowDropdown(false);
+                return;
+            }
+
+            // Avoid refetching if the exact ticker was just selected
+            if (!showDropdown && searchResults.some(r => r.symbol.toUpperCase() === ticker.toUpperCase())) return;
+
+            setIsSearching(true);
+            try {
+                const res = await fetch(`https://api.coingecko.com/api/v3/search?query=${ticker}`);
+                const data = await res.json();
+                if (data && data.coins) {
+                    setSearchResults(data.coins.slice(0, 5)); // Limit to top 5
+                    setShowDropdown(true);
+                }
+            } catch (err) {
+                console.error("CoinGecko search failed:", err);
+            } finally {
+                setIsSearching(false);
+            }
+        };
+
+        const timeoutId = setTimeout(fetchAssets, 400); // 400ms debounce
+        return () => clearTimeout(timeoutId);
+    }, [ticker, showDropdown, searchResults]);
+
+    const handleSelect = (symbol: string) => {
+        setTicker(symbol.toUpperCase());
+        setShowDropdown(false);
+    };
 
     const handleSubmit = () => {
         if (!ticker || !quantity || !price) return;
@@ -57,17 +97,45 @@ export default function TradeInput() {
 
             <form className="space-y-4">
                 {/* Ticker Input */}
-                <div className="glass rounded-xl p-4">
+                <div className="glass rounded-xl p-4 relative z-20 overflow-visible">
                     <label className="block text-xs font-semibold text-tab-inactive uppercase tracking-wider mb-2">
                         Asset Ticker
                     </label>
-                    <input
-                        type="text"
-                        value={ticker}
-                        onChange={(e) => setTicker(e.target.value)}
-                        placeholder="e.g. AAPL, BTC"
-                        className="w-full bg-transparent text-xl font-bold placeholder-foreground/20 focus:outline-none uppercase"
-                    />
+                    <div className="relative">
+                        <input
+                            type="text"
+                            value={ticker}
+                            onChange={(e) => {
+                                setTicker(e.target.value);
+                                setShowDropdown(true);
+                            }}
+                            onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
+                            placeholder="e.g. AAPL, BTC"
+                            className="w-full bg-transparent text-xl font-bold placeholder-foreground/20 focus:outline-none uppercase"
+                        />
+                        {isSearching && (
+                            <div className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full border-2 border-accent border-t-transparent animate-spin" />
+                        )}
+                    </div>
+
+                    {/* Autocomplete Dropdown */}
+                    {showDropdown && searchResults.length > 0 && (
+                        <div className="absolute left-0 right-0 top-[110%] bg-[#f2f2f7] dark:bg-[#1C1C1E] border border-glass-border rounded-xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] max-h-60 overflow-y-auto overflow-hidden text-foreground">
+                            {searchResults.map((coin) => (
+                                <div
+                                    key={coin.id}
+                                    onClick={() => handleSelect(coin.symbol)}
+                                    className="flex items-center gap-3 p-3 hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer border-b border-glass-border last:border-0"
+                                >
+                                    {coin.thumb && <img src={coin.thumb} alt={coin.symbol} className="w-6 h-6 rounded-full" />}
+                                    <div className="flex flex-col">
+                                        <span className="font-bold text-sm uppercase">{coin.symbol}</span>
+                                        <span className="text-xs text-tab-inactive">{coin.name}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
 
                 {/* Quantity and Price Row */}
