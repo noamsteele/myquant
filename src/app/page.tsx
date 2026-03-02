@@ -1,13 +1,42 @@
 "use client";
 
-import { TrendingUp, TrendingDown, Wallet, Activity, Box, RefreshCcw } from "lucide-react";
+import { useState, useMemo } from "react";
+import { TrendingUp, TrendingDown, Wallet, Activity, Box, RefreshCcw, X, Server } from "lucide-react";
 import { usePortfolio } from "@/context/PortfolioContext";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 
 const COLORS = ['#007aff', '#34C759', '#FF9500', '#AF52DE', '#FF3B30', '#5AC8FA'];
 
 export default function Dashboard() {
-  const { holdings, totalValue, currency, setCurrency, currencySymbol } = usePortfolio();
+  const { holdings, totalValue, currency, setCurrency, currencySymbol, trades } = usePortfolio();
+  const [selectedAsset, setSelectedAsset] = useState<string | null>(null);
+
+  const selectedHolding = holdings.find(h => h.ticker === selectedAsset);
+
+  const assetBreakdown = useMemo(() => {
+    if (!selectedAsset) return { platforms: [] };
+
+    // We want the total shares per platform
+    const platformShares: Record<string, number> = {};
+    const assetTrades = trades.filter(t => t.ticker.toUpperCase() === selectedAsset);
+
+    assetTrades.forEach(t => {
+      if (!platformShares[t.platform]) platformShares[t.platform] = 0;
+      if (t.type === "BUY") platformShares[t.platform] += t.quantity;
+      if (t.type === "SELL") platformShares[t.platform] -= t.quantity;
+
+      // Prevent negative floating point due to errors
+      if (platformShares[t.platform] < 0) platformShares[t.platform] = 0;
+    });
+
+    // Convert to array
+    return {
+      platforms: Object.entries(platformShares)
+        .map(([name, shares]) => ({ name, shares }))
+        .filter(p => p.shares > 0.000001)
+        .sort((a, b) => b.shares - a.shares)
+    };
+  }, [selectedAsset, trades]);
 
   const chartData = holdings.map(h => ({ name: h.ticker, value: h.shares * h.currentPrice }));
 
@@ -79,14 +108,14 @@ export default function Dashboard() {
                   paddingAngle={4}
                   dataKey="value"
                   stroke="none"
-                  cornerRadii={4}
+                  cornerRadius={4}
                 >
                   {chartData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
                 <Tooltip
-                  formatter={(value: number) => [`${currencySymbol}${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 'Value']}
+                  formatter={(value: number | undefined) => [`${currencySymbol}${value ? value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 0}`, 'Value']}
                   contentStyle={{ backgroundColor: 'var(--card-bg)', borderRadius: '16px', border: '1px solid var(--glass-border)', backdropFilter: 'blur(20px)', boxShadow: '0 8px 30px rgba(0,0,0,0.12)' }}
                   itemStyle={{ color: 'var(--foreground)', fontWeight: 'bold' }}
                 />
@@ -122,7 +151,11 @@ export default function Dashboard() {
             </div>
           ) : (
             holdings.map((asset) => (
-              <div key={asset.ticker} className="glass rounded-2xl p-4 flex items-center justify-between active:scale-[0.98] transition-transform duration-200">
+              <div
+                key={asset.ticker}
+                onClick={() => setSelectedAsset(asset.ticker)}
+                className="glass rounded-2xl p-4 flex items-center justify-between active:scale-[0.98] transition-transform duration-200 cursor-pointer hover:bg-white/5"
+              >
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-full bg-foreground/5 flex items-center justify-center font-bold text-lg text-accent border border-glass-border">
                     {asset.ticker[0]}
@@ -145,6 +178,76 @@ export default function Dashboard() {
           )}
         </div>
       </section>
+      {/* Asset Detail Pop-up Modal */}
+      {selectedAsset && selectedHolding && (
+        <div className="fixed inset-0 z-[100] flex items-end md:items-center justify-center p-0 md:p-4 pb-[env(safe-area-inset-bottom)]">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSelectedAsset(null)} />
+          <div className="relative bg-[#1C1C1D] w-full md:w-[400px] max-h-[90vh] rounded-t-[2rem] md:rounded-[2rem] border border-glass-border shadow-2xl flex flex-col overflow-hidden pb-4">
+            {/* Handle bar for mobile drag suggestion */}
+            <div className="w-12 h-1.5 bg-white/20 rounded-full mx-auto mt-4 mb-2 md:hidden" />
+
+            <div className="p-6 pt-4 overflow-y-auto">
+              <div className="flex justify-between items-start mb-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-full bg-accent/20 flex items-center justify-center font-bold text-2xl text-accent border border-accent/30 shadow-[0_0_15px_rgba(0,122,255,0.2)]">
+                    {selectedHolding.ticker[0]}
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-bold leading-tight">{selectedHolding.ticker}</h2>
+                    <p className="text-tab-inactive font-medium">{selectedHolding.name}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedAsset(null)}
+                  className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white/70 hover:bg-white/20 transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* At a glance stats */}
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                <div className="bg-white/5 rounded-xl p-4 border border-white/5 shadow-inner">
+                  <p className="text-xs text-tab-inactive font-semibold uppercase tracking-wider mb-1">Total Value</p>
+                  <p className="text-lg font-bold">{currencySymbol}{(selectedHolding.shares * selectedHolding.currentPrice).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                </div>
+                <div className="bg-white/5 rounded-xl p-4 border border-white/5 shadow-inner">
+                  <p className="text-xs text-tab-inactive font-semibold uppercase tracking-wider mb-1">Total Return</p>
+                  <p className={`text-lg font-bold ${selectedHolding.currentPrice >= selectedHolding.costBasis ? 'text-[#34C759]' : 'text-[#FF3B30]'}`}>
+                    {selectedHolding.costBasis > 0 ? ((selectedHolding.currentPrice - selectedHolding.costBasis) / selectedHolding.costBasis * 100).toFixed(2) : "0.00"}%
+                  </p>
+                </div>
+              </div>
+
+              {/* Platform Breakdown */}
+              <div>
+                <h3 className="text-sm font-bold flex items-center gap-2 mb-3 text-white/90">
+                  <Server size={16} className="text-accent" />
+                  Platform Distribution
+                </h3>
+                <div className="space-y-2">
+                  {assetBreakdown.platforms.length === 0 ? (
+                    <p className="text-sm text-tab-inactive bg-white/5 rounded-lg p-3 text-center border border-white/5">No platform data available.</p>
+                  ) : (
+                    assetBreakdown.platforms.map((p, i) => (
+                      <div key={i} className="flex justify-between items-center bg-white/5 p-4 rounded-xl border border-white/5 hover:bg-white/10 transition-colors">
+                        <span className="font-semibold text-sm">{p.name}</span>
+                        <div className="text-right">
+                          <p className="font-bold text-sm text-white">{p.shares.toLocaleString(undefined, { maximumFractionDigits: 4 })} shares</p>
+                          <p className="text-xs text-tab-inactive font-medium">{((p.shares / selectedHolding.shares) * 100).toFixed(1)}% of holding</p>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="px-6 pb-2 pt-2">
+              <button onClick={() => setSelectedAsset(null)} className="w-full py-4 bg-accent text-white rounded-xl font-bold text-lg shadow-[0_4px_14px_rgba(0,122,255,0.4)] active:scale-[0.98] transition-transform">Done</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
