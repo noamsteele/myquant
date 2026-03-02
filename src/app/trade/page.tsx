@@ -6,12 +6,13 @@ import { usePortfolio } from "@/context/PortfolioContext";
 
 export default function TradeInput() {
     const router = useRouter();
-    const { addTrade } = usePortfolio();
+    const { addTrade, currency: baseCurrency } = usePortfolio();
 
     const [tradeType, setTradeType] = useState<"BUY" | "SELL">("BUY");
     const [ticker, setTicker] = useState("");
     const [quantity, setQuantity] = useState("");
     const [price, setPrice] = useState("");
+    const [tradeCurrency, setTradeCurrency] = useState<"USD" | "CAD">(baseCurrency || "USD");
     const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
     const [platform, setPlatform] = useState("Questrade");
 
@@ -64,6 +65,7 @@ export default function TradeInput() {
             ticker: ticker.toUpperCase(),
             quantity: parseFloat(quantity),
             price: parseFloat(price),
+            tradeCurrency,
             date,
             platform
         });
@@ -154,12 +156,18 @@ export default function TradeInput() {
                             className="w-full bg-transparent text-xl font-bold placeholder-foreground/20 focus:outline-none"
                         />
                     </div>
-                    <div className="glass rounded-xl p-4 flex-1">
-                        <label className="block text-xs font-semibold text-tab-inactive uppercase tracking-wider mb-2">
-                            Price per unit
-                        </label>
+                    <div className="glass rounded-xl p-4 flex-1 flex flex-col justify-between relative">
+                        <div className="flex justify-between items-start mb-2">
+                            <label className="block text-xs font-semibold text-tab-inactive uppercase tracking-wider">
+                                Price per unit
+                            </label>
+                            <div className="flex gap-1 bg-foreground/10 p-0.5 rounded-lg -mt-2 -mr-2">
+                                <button type="button" onClick={() => setTradeCurrency("USD")} className={`text-[10px] px-1.5 py-0.5 rounded-md transition-colors ${tradeCurrency === "USD" ? 'bg-background shadow-sm font-bold text-foreground' : 'text-tab-inactive hover:text-foreground'}`}>USD</button>
+                                <button type="button" onClick={() => setTradeCurrency("CAD")} className={`text-[10px] px-1.5 py-0.5 rounded-md transition-colors ${tradeCurrency === "CAD" ? 'bg-background shadow-sm font-bold text-foreground' : 'text-tab-inactive hover:text-foreground'}`}>CAD</button>
+                            </div>
+                        </div>
                         <div className="flex items-center">
-                            <span className="text-xl font-bold mr-1">$</span>
+                            <span className="text-xl font-bold mr-1 text-tab-inactive">{tradeCurrency === "CAD" ? "C$" : "$"}</span>
                             <input
                                 type="number"
                                 value={price}

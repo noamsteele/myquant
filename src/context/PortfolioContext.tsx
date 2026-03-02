@@ -8,6 +8,7 @@ export type Trade = {
     ticker: string;
     quantity: number;
     price: number;
+    tradeCurrency?: "USD" | "CAD";
     date: string;
     platform: string;
 };
@@ -99,14 +100,18 @@ export const PortfolioProvider = ({ children }: { children: React.ReactNode }) =
     // Calculate holdings based on trades
     const holdings: Holding[] = React.useMemo(() => {
         const map = new Map<string, { shares: number, totalCost: number }>();
+        const latestFx = livePrices["CAD=X"]?.price || 1.35;
 
         trades.forEach(trade => {
             const ticker = trade.ticker.toUpperCase();
             const current = map.get(ticker) || { shares: 0, totalCost: 0 };
 
+            const fxToUSD = trade.tradeCurrency === "CAD" ? (1 / latestFx) : 1;
+            const normalizedPrice = trade.price * fxToUSD;
+
             if (trade.type === "BUY") {
                 current.shares += trade.quantity;
-                current.totalCost += (trade.quantity * trade.price);
+                current.totalCost += (trade.quantity * normalizedPrice);
             } else if (trade.type === "SELL") {
                 // Average cost algorithm
                 const prevAvgCost = current.shares > 0 ? (current.totalCost / current.shares) : 0;
