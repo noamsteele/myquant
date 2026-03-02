@@ -194,18 +194,13 @@ export default function TradeInput() {
 
                     <div className="glass rounded-xl p-4 flex items-center justify-between">
                         <label className="text-sm font-semibold">Platform</label>
-                        <div className="relative">
-                            <select
-                                value={platform}
-                                onChange={(e) => setPlatform(e.target.value)}
-                                className="appearance-none bg-transparent text-right font-medium focus:outline-none text-accent pr-4 z-10 relative cursor-pointer"
-                            >
-                                <option value="Questrade">Questrade</option>
-                                <option value="Binance">Binance</option>
-                                <option value="Wealthsimple">Wealthsimple</option>
-                                <option value="Other">Other</option>
-                            </select>
-                        </div>
+                        <input
+                            type="text"
+                            value={platform}
+                            onChange={(e) => setPlatform(e.target.value)}
+                            placeholder="e.g. Binance"
+                            className="bg-transparent text-right font-medium focus:outline-none text-accent w-1/2"
+                        />
                     </div>
                 </div>
 

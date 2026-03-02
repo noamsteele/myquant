@@ -100,14 +100,6 @@ export default function Insights() {
                 ))}
             </div>
 
-            <div className="mt-8 p-6 rounded-[1.5rem] bg-gradient-to-br from-indigo-500/20 to-purple-500/10 border border-purple-500/20 text-center">
-                <BrainCircuit size={32} className="text-purple-400 mx-auto mb-3" />
-                <h4 className="font-bold mb-1">MyQuant Pro</h4>
-                <p className="text-xs text-tab-inactive font-medium mb-4">Unlock advanced algorithmic rebalancing alerts and real-time news.</p>
-                <button className="bg-purple-500 text-white font-bold text-sm px-6 py-2.5 rounded-full shadow-lg active:scale-95 transition-transform">
-                    Upgrade Now
-                </button>
-            </div>
         </div>
     );
 }

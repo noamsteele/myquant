@@ -1,15 +1,54 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { TrendingUp, TrendingDown, Wallet, Activity, Box, RefreshCcw, X, Server } from "lucide-react";
+import { TrendingUp, TrendingDown, Wallet, Activity, Box, RefreshCcw, X, Server, ArrowDownUp, Trash2, CheckCircle2 } from "lucide-react";
 import { usePortfolio } from "@/context/PortfolioContext";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
+import { Treemap, ResponsiveContainer, Tooltip } from "recharts";
 
 const COLORS = ['#007aff', '#34C759', '#FF9500', '#AF52DE', '#FF3B30', '#5AC8FA'];
 
+const CustomizedContent = (props: any) => {
+  const { x, y, width, height, index, name, value, colors, totalValue } = props;
+  const percent = ((value / totalValue) * 100).toFixed(1);
+
+  if (width < 30 || height < 30) return null;
+
+  return (
+    <g>
+      <rect
+        x={x}
+        y={y}
+        width={width}
+        height={height}
+        style={{
+          fill: colors[index % colors.length],
+          stroke: 'var(--background)',
+          strokeWidth: 2,
+          strokeOpacity: 1,
+          rx: 8,
+          ry: 8,
+        }}
+      />
+      {width > 40 && height > 30 && (
+        <text x={x + width / 2} y={y + height / 2 - 2} textAnchor="middle" fill="#fff" fontSize={12} fontWeight="bold">
+          {name}
+        </text>
+      )}
+      {width > 50 && height > 45 && (
+        <text x={x + width / 2} y={y + height / 2 + 12} textAnchor="middle" fill="rgba(255,255,255,0.7)" fontSize={10} fontWeight="600">
+          {percent}%
+        </text>
+      )}
+    </g>
+  );
+};
+
 export default function Dashboard() {
-  const { holdings, totalValue, currency, setCurrency, currencySymbol, trades } = usePortfolio();
+  const { holdings, totalValue, currency, setCurrency, currencySymbol, trades, removeTrade } = usePortfolio();
   const [selectedAsset, setSelectedAsset] = useState<string | null>(null);
+
+  const [sortOrder, setSortOrder] = useState<"VALUE_DESC" | "VALUE_ASC" | "AZ" | "ZA" | "RETURN_DESC">("VALUE_DESC");
+  const [showSortMenu, setShowSortMenu] = useState(false);
 
   const selectedHolding = holdings.find(h => h.ticker === selectedAsset);
 
@@ -39,6 +78,28 @@ export default function Dashboard() {
   }, [selectedAsset, trades]);
 
   const chartData = holdings.map(h => ({ name: h.ticker, value: h.shares * h.currentPrice }));
+
+  const sortedHoldings = useMemo(() => {
+    return [...holdings].sort((a, b) => {
+      const valA = a.shares * a.currentPrice;
+      const valB = b.shares * b.currentPrice;
+      if (sortOrder === "VALUE_DESC") return valB - valA;
+      if (sortOrder === "VALUE_ASC") return valA - valB;
+      if (sortOrder === "AZ") return a.ticker.localeCompare(b.ticker);
+      if (sortOrder === "ZA") return b.ticker.localeCompare(a.ticker);
+      if (sortOrder === "RETURN_DESC") {
+        const retA = a.costBasis > 0 ? (a.currentPrice - a.costBasis) / a.costBasis : -Infinity;
+        const retB = b.costBasis > 0 ? (b.currentPrice - b.costBasis) / b.costBasis : -Infinity;
+        return retB - retA;
+      }
+      return 0;
+    });
+  }, [holdings, sortOrder]);
+
+  const specificTrades = useMemo(() => {
+    if (!selectedAsset) return [];
+    return trades.filter(t => t.ticker.toUpperCase() === selectedAsset).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [selectedAsset, trades]);
 
   // Calculate actual total return dynamically instead of mock placeholder
   const totalCost = holdings.reduce((acc, curr) => acc + (curr.costBasis * curr.shares), 0);
@@ -96,30 +157,22 @@ export default function Dashboard() {
       {holdings.length > 0 && (
         <section className="glass rounded-[2rem] p-6 border border-glass-border">
           <h3 className="text-xs font-bold uppercase tracking-widest text-[#8E8E93] dark:text-[#98989D] mb-4">Allocation</h3>
-          <div className="h-[180px] w-full">
+          <div className="h-[220px] w-full mt-4 bg-background/30 rounded-2xl overflow-hidden p-1">
             <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={chartData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={85}
-                  paddingAngle={4}
-                  dataKey="value"
-                  stroke="none"
-                  cornerRadius={4}
-                >
-                  {chartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
+              <Treemap
+                data={chartData}
+                dataKey="value"
+                stroke="none"
+                fill="none"
+                isAnimationActive={true}
+                content={<CustomizedContent colors={COLORS} totalValue={totalValue} />}
+              >
                 <Tooltip
                   formatter={(value: number | undefined) => [`${currencySymbol}${value ? value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 0}`, 'Value']}
-                  contentStyle={{ backgroundColor: 'var(--card-bg)', borderRadius: '16px', border: '1px solid var(--glass-border)', backdropFilter: 'blur(20px)', boxShadow: '0 8px 30px rgba(0,0,0,0.12)' }}
+                  contentStyle={{ backgroundColor: 'var(--card-bg)', borderRadius: '16px', border: '1px solid var(--glass-border)', backdropFilter: 'blur(20px)', boxShadow: '0 8px 30px rgba(0,0,0,0.12)', zIndex: 100 }}
                   itemStyle={{ color: 'var(--foreground)', fontWeight: 'bold' }}
                 />
-              </PieChart>
+              </Treemap>
             </ResponsiveContainer>
           </div>
         </section>
@@ -127,12 +180,39 @@ export default function Dashboard() {
 
       {/* Asset List */}
       <section>
-        <div className="flex justify-between items-end mb-4 px-1">
+        <div className="flex justify-between items-end mb-4 px-1 relative">
           <h3 className="text-xl font-bold flex items-center gap-2">
             <Activity size={20} className="text-accent" />
             Current Holdings
           </h3>
-          <span className="text-sm text-tab-inactive font-medium">See All</span>
+          <div className="relative">
+            <button
+              onClick={() => setShowSortMenu(!showSortMenu)}
+              className="flex items-center gap-1.5 text-sm font-semibold text-tab-inactive hover:text-foreground transition-colors bg-white/5 px-3 py-1.5 rounded-full border border-white/5 active:scale-95"
+            >
+              <ArrowDownUp size={14} />
+              Sort
+            </button>
+            {showSortMenu && (
+              <div className="absolute right-0 top-[110%] w-48 bg-[#f2f2f7] dark:bg-[#1C1C1E] border border-glass-border rounded-xl shadow-2xl overflow-hidden z-[50]">
+                {[
+                  { label: "Value (High - Low)", val: "VALUE_DESC" },
+                  { label: "Value (Low - High)", val: "VALUE_ASC" },
+                  { label: "Total Return %", val: "RETURN_DESC" },
+                  { label: "Alphabetical (A-Z)", val: "AZ" },
+                ].map(opt => (
+                  <button
+                    key={opt.val}
+                    onClick={() => { setSortOrder(opt.val as any); setShowSortMenu(false); }}
+                    className={`w-full text-left px-4 py-3 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/5 flex items-center justify-between ${sortOrder === opt.val ? 'text-accent' : 'text-foreground'}`}
+                  >
+                    {opt.label}
+                    {sortOrder === opt.val && <CheckCircle2 size={16} />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="space-y-4">
@@ -150,7 +230,7 @@ export default function Dashboard() {
               </a>
             </div>
           ) : (
-            holdings.map((asset) => (
+            sortedHoldings.map((asset) => (
               <div
                 key={asset.ticker}
                 onClick={() => setSelectedAsset(asset.ticker)}
@@ -236,6 +316,39 @@ export default function Dashboard() {
                           <p className="font-bold text-sm text-white">{p.shares.toLocaleString(undefined, { maximumFractionDigits: 4 })} shares</p>
                           <p className="text-xs text-tab-inactive font-medium">{((p.shares / selectedHolding.shares) * 100).toFixed(1)}% of holding</p>
                         </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+              {/* Trade History */}
+              <div className="mt-8">
+                <h3 className="text-sm font-bold flex items-center gap-2 mb-3 text-white/90">
+                  <Activity size={16} className="text-accent" />
+                  Trade History
+                </h3>
+                <div className="space-y-2">
+                  {specificTrades.length === 0 ? (
+                    <p className="text-sm text-tab-inactive bg-white/5 rounded-lg p-3 text-center border border-white/5">No trades logged.</p>
+                  ) : (
+                    specificTrades.map((t) => (
+                      <div key={t.id} className="flex justify-between items-center bg-white/5 p-4 rounded-xl border border-white/5 relative group">
+                        <div>
+                          <p className="font-bold text-sm text-white">{t.type === "BUY" ? "Bought" : "Sold"} {t.quantity} <span className="text-tab-inactive text-xs font-medium">@ ${t.price}</span></p>
+                          <p className="text-xs text-tab-inactive font-medium">{t.date} • {t.platform}</p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            if (confirm("Are you sure you want to delete this trade?")) {
+                              removeTrade(t.id);
+                              if (specificTrades.length === 1) setSelectedAsset(null); // Last trade deleted, close modal
+                            }
+                          }}
+                          className="w-8 h-8 rounded-full bg-red-500/10 flex items-center justify-center text-red-500 hover:bg-red-500/20 active:scale-90 transition-colors"
+                          title="Delete Trade"
+                        >
+                          <Trash2 size={14} />
+                        </button>
                       </div>
                     ))
                   )}

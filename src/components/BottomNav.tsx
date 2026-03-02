@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, List, PlusCircle, Lightbulb, User } from "lucide-react";
+import { Home, List, PlusCircle, Lightbulb, Settings } from "lucide-react";
 
 export default function BottomNav() {
     const pathname = usePathname();
@@ -12,7 +12,7 @@ export default function BottomNav() {
         { name: "Watch", href: "/watchlist", icon: List },
         { name: "Trade", href: "/trade", icon: PlusCircle },
         { name: "Insights", href: "/insights", icon: Lightbulb },
-        { name: "Profile", href: "/profile", icon: User },
+        { name: "Settings", href: "/profile", icon: Settings },
     ];
 
     return (

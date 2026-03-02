@@ -33,6 +33,8 @@ type PortfolioContextType = {
     watchlist: string[];
     addToWatchlist: (ticker: string) => void;
     removeFromWatchlist: (ticker: string) => void;
+    removeTrade: (id: string) => void;
+    importData: (jsonData: any) => boolean;
 };
 
 const PortfolioContext = createContext<PortfolioContextType | undefined>(undefined);
@@ -175,8 +177,37 @@ export const PortfolioProvider = ({ children }: { children: React.ReactNode }) =
         localStorage.setItem("myquant_watchlist", JSON.stringify(next));
     };
 
+    const removeTrade = (id: string) => {
+        setTrades(prev => {
+            const next = Array.isArray(prev) ? prev.filter(t => t.id !== id) : [];
+            localStorage.setItem("myquant_trades", JSON.stringify(next));
+            return next;
+        });
+    };
+
+    const importData = (data: any) => {
+        if (!data) return false;
+        try {
+            if (Array.isArray(data.trades)) {
+                setTrades(data.trades);
+                localStorage.setItem("myquant_trades", JSON.stringify(data.trades));
+            }
+            if (Array.isArray(data.watchlist)) {
+                setWatchlist(data.watchlist);
+                localStorage.setItem("myquant_watchlist", JSON.stringify(data.watchlist));
+            }
+            if (data.currency && (data.currency === "USD" || data.currency === "CAD")) {
+                setCurrency(data.currency);
+            }
+            return true;
+        } catch (e) {
+            console.error("Data import error", e);
+            return false;
+        }
+    };
+
     return (
-        <PortfolioContext.Provider value={{ trades, holdings, totalValue, addTrade, currency, setCurrency, currencySymbol, watchlist, addToWatchlist, removeFromWatchlist }}>
+        <PortfolioContext.Provider value={{ trades, holdings, totalValue, addTrade, currency, setCurrency, currencySymbol, watchlist, addToWatchlist, removeFromWatchlist, removeTrade, importData }}>
             {children}
         </PortfolioContext.Provider>
     );
