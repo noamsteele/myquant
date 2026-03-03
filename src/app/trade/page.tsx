@@ -23,7 +23,7 @@ export default function TradeInput() {
     const [price, setPrice] = useState("");
     const [tradeCurrency, setTradeCurrency] = useState<"USD" | "CAD">(baseCurrency || "USD");
     const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
-    const [platform, setPlatform] = useState("Questrade");
+    const [platform, setPlatform] = useState("");
 
     const [assetType, setAssetType] = useState<"stock" | "crypto">("stock");
     const [searchResults, setSearchResults] = useState<SearchResult[]>([]);

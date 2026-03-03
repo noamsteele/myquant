@@ -2,165 +2,240 @@
 
 import { useState, useEffect } from "react";
 import { usePortfolio } from "@/context/PortfolioContext";
-import { Search, Plus, Trash2, Activity } from "lucide-react";
+import { Search, Plus, Trash2, Activity, BarChart2, Bitcoin } from "lucide-react";
+
+type SearchResult = {
+    symbol: string;
+    name: string;
+    thumb?: string;
+    exchange?: string;
+    assetType: "stock" | "etf" | "crypto";
+};
+
+// localStorage key for persisting asset type metadata
+const META_KEY = "myquant_watchlist_meta";
+
+function loadMeta(): Record<string, "stock" | "etf" | "crypto"> {
+    try {
+        const saved = localStorage.getItem(META_KEY);
+        return saved ? JSON.parse(saved) : {};
+    } catch { return {}; }
+}
+
+function saveMeta(meta: Record<string, "stock" | "etf" | "crypto">) {
+    localStorage.setItem(META_KEY, JSON.stringify(meta));
+}
+
+const TAG_STYLE: Record<string, string> = {
+    stock: "bg-blue-500/15 text-blue-400 border-blue-500/25",
+    etf:   "bg-purple-500/15 text-purple-400 border-purple-500/25",
+    crypto: "bg-orange-500/15 text-orange-400 border-orange-500/25",
+};
 
 export default function Watchlist() {
     const { watchlist, addToWatchlist, removeFromWatchlist, currencySymbol } = usePortfolio();
 
     const [searchQuery, setSearchQuery] = useState("");
-    const [searchResults, setSearchResults] = useState<{ id: string, name: string, symbol: string, thumb: string }[]>([]);
+    const [searchMode, setSearchMode] = useState<"stock" | "crypto">("stock");
+    const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
     const [isSearching, setIsSearching] = useState(false);
 
-    // Mock live prices since we don't have access to the internals of PortfolioContext fetching for Watchlist items here natively unless it's exposed, but we can do a local fetch for display.
-    const [watchlistPrices, setWatchlistPrices] = useState<Record<string, { price: number, change: number }>>({});
+    const [watchlistPrices, setWatchlistPrices] = useState<Record<string, { price: number; change: number }>>({});
+    const [meta, setMeta] = useState<Record<string, "stock" | "etf" | "crypto">>({});
 
-    // CoinGecko Search API Debounce
+    // Load persisted meta on mount
     useEffect(() => {
-        const fetchAssets = async () => {
-            if (searchQuery.trim().length < 2) {
-                setSearchResults([]);
-                return;
-            }
+        setMeta(loadMeta());
+    }, []);
 
+    // Search with debounce — uses unified /api/search route
+    useEffect(() => {
+        const run = async () => {
+            const q = searchQuery.trim();
+            if (q.length < 1) { setSearchResults([]); return; }
             setIsSearching(true);
             try {
-                const res = await fetch(`https://api.coingecko.com/api/v3/search?query=${searchQuery}`);
+                const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&type=${searchMode}`);
                 const data = await res.json();
-                if (data && data.coins) {
-                    setSearchResults(data.coins.slice(0, 4));
-                }
-            } catch (err) {
-                console.error("CoinGecko search failed:", err);
-            } finally {
-                setIsSearching(false);
-            }
+                const results: SearchResult[] = (data.results ?? []).map((r: any) => ({
+                    symbol: r.symbol.toUpperCase(),
+                    name: r.name,
+                    thumb: r.thumb,
+                    exchange: r.exchange,
+                    assetType: r.type === "crypto" ? "crypto" : (r.exchange?.includes("ETF") ? "etf" : "stock"),
+                }));
+                setSearchResults(results.slice(0, 6));
+            } catch { setSearchResults([]); }
+            finally { setIsSearching(false); }
         };
+        const id = setTimeout(run, 350);
+        return () => clearTimeout(id);
+    }, [searchQuery, searchMode]);
 
-        const timeoutId = setTimeout(fetchAssets, 400);
-        return () => clearTimeout(timeoutId);
-    }, [searchQuery]);
+    // Reset search results when toggling mode
+    useEffect(() => {
+        setSearchResults([]);
+        setSearchQuery("");
+    }, [searchMode]);
 
-    // Fetch live prices for watchlist
+    // Fetch live prices for watchlist items
     useEffect(() => {
         if (!watchlist.length) return;
-        const toFetch = watchlist.join(",");
-
-        // Let's fetch the real prices from the internal API
-        fetch(`/api/prices?tickers=${toFetch},CAD=X`)
-            .then(res => res.json())
-            .then(data => {
-                setWatchlistPrices(data);
-            })
-            .catch(err => console.error("Failed to fetch watchlist prices", err));
+        fetch(`/api/prices?tickers=${watchlist.join(",")},CAD=X`)
+            .then(r => r.json())
+            .then(data => setWatchlistPrices(data))
+            .catch(console.error);
     }, [watchlist]);
 
-    const handleAdd = (symbol: string) => {
-        addToWatchlist(symbol.toUpperCase());
+    const handleAdd = (result: SearchResult) => {
+        addToWatchlist(result.symbol);
+        const next = { ...meta, [result.symbol]: result.assetType };
+        setMeta(next);
+        saveMeta(next);
         setSearchQuery("");
         setSearchResults([]);
     };
 
-    const fxRate = watchlistPrices["CAD=X"]?.price || 1.35;
+    const handleRemove = (ticker: string) => {
+        removeFromWatchlist(ticker);
+        const next = { ...meta };
+        delete next[ticker];
+        setMeta(next);
+        saveMeta(next);
+    };
+
+    const fxRate = watchlistPrices["CAD=X"]?.price || 1.36;
     const isCAD = currencySymbol === "C$";
 
     return (
-        <div className="min-h-screen bg-background text-foreground pb-24 pt-8 px-4 font-sans space-y-8">
-            <header className="mb-2">
+        <div className="min-h-screen bg-background text-foreground pb-24 pt-8 px-4 font-sans space-y-5">
+            <header className="mb-1">
                 <h1 className="text-3xl font-bold tracking-tight">Watchlist</h1>
                 <p className="text-tab-inactive text-sm font-medium">Track assets before you buy</p>
             </header>
 
+            {/* Stock / Crypto Search Mode Toggle */}
+            <div className="glass p-1 rounded-xl flex border border-glass-border">
+                <button
+                    onClick={() => setSearchMode("stock")}
+                    className={`flex-1 py-2 text-sm font-semibold rounded-lg flex items-center justify-center gap-1.5 transition-all ${searchMode === "stock" ? "bg-foreground/10 text-foreground shadow" : "text-tab-inactive"}`}
+                >
+                    <BarChart2 size={13} />
+                    Stock / ETF
+                </button>
+                <button
+                    onClick={() => setSearchMode("crypto")}
+                    className={`flex-1 py-2 text-sm font-semibold rounded-lg flex items-center justify-center gap-1.5 transition-all ${searchMode === "crypto" ? "bg-foreground/10 text-foreground shadow" : "text-tab-inactive"}`}
+                >
+                    <Bitcoin size={13} />
+                    Crypto
+                </button>
+            </div>
+
             {/* Search Input */}
-            <div className="glass rounded-xl p-4 relative z-20 overflow-visible">
+            <div className="glass rounded-xl p-4 relative z-20 overflow-visible border border-glass-border">
                 <div className="relative flex items-center">
-                    <Search className="absolute left-3 text-tab-inactive" size={18} />
+                    <Search className="absolute left-0 text-tab-inactive" size={17} />
                     <input
                         type="text"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="Search ticker to add..."
-                        className="w-full bg-transparent pl-10 py-2 font-bold placeholder-foreground/20 focus:outline-none uppercase"
+                        onBlur={() => setTimeout(() => setSearchResults([]), 200)}
+                        placeholder={searchMode === "stock" ? "Search stocks & ETFs..." : "Search crypto..."}
+                        className="w-full bg-transparent pl-7 py-1.5 font-semibold placeholder-foreground/25 focus:outline-none uppercase text-base"
                     />
                     {isSearching && (
-                        <div className="absolute right-3 w-4 h-4 rounded-full border-2 border-accent border-t-transparent animate-spin" />
+                        <div className="absolute right-0 w-4 h-4 rounded-full border-2 border-accent border-t-transparent animate-spin" />
                     )}
                 </div>
 
                 {/* Autocomplete Dropdown */}
                 {searchResults.length > 0 && (
-                    <div className="absolute left-0 right-0 top-[110%] bg-[#f2f2f7] dark:bg-[#1C1C1E] border border-glass-border rounded-xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] max-h-60 overflow-y-auto overflow-hidden text-foreground">
-                        {searchResults.map((coin) => (
+                    <div className="absolute left-0 right-0 top-[110%] bg-[#f0f2f7] dark:bg-[#0d1a30] border border-glass-border rounded-lg shadow-2xl max-h-72 overflow-y-auto z-50">
+                        {searchResults.map((result) => (
                             <div
-                                key={coin.id}
-                                onClick={() => handleAdd(coin.symbol)}
-                                className="flex items-center justify-between p-3 hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer border-b border-glass-border last:border-0"
+                                key={result.symbol}
+                                onClick={() => handleAdd(result)}
+                                className="flex items-center justify-between px-4 py-3 hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer border-b border-glass-border last:border-0"
                             >
-                                <div className="flex items-center gap-3">
-                                    {coin.thumb && <img src={coin.thumb} alt={coin.symbol} className="w-6 h-6 rounded-full" />}
-                                    <div className="flex flex-col">
-                                        <span className="font-bold text-sm uppercase">{coin.symbol}</span>
-                                        <span className="text-xs text-tab-inactive max-w-[150px] truncate">{coin.name}</span>
+                                <div className="flex items-center gap-3 min-w-0">
+                                    {result.thumb ? (
+                                        <img src={result.thumb} alt={result.symbol} className="w-7 h-7 rounded-full flex-shrink-0" />
+                                    ) : (
+                                        <div className="w-7 h-7 rounded-md bg-accent/15 flex items-center justify-center text-accent font-bold text-xs flex-shrink-0">
+                                            {result.symbol[0]}
+                                        </div>
+                                    )}
+                                    <div className="min-w-0">
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-bold text-sm">{result.symbol}</span>
+                                            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${TAG_STYLE[result.assetType]}`}>
+                                                {result.assetType.toUpperCase()}
+                                            </span>
+                                        </div>
+                                        <p className="text-xs text-tab-inactive truncate">{result.name}{result.exchange ? ` · ${result.exchange}` : ""}</p>
                                     </div>
                                 </div>
-                                <Plus size={18} className="text-accent" />
+                                <Plus size={17} className="text-accent flex-shrink-0 ml-2" />
                             </div>
                         ))}
-                        {/* Always add an option for users manually typing stock symbols that Coingecko might not find */}
-                        <div
-                            onClick={() => handleAdd(searchQuery)}
-                            className="flex items-center justify-between p-3 hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer border-t border-glass-border/50 text-accent font-medium text-sm"
-                        >
-                            <span>Add "{searchQuery.toUpperCase()}" as stock ticker</span>
-                            <Plus size={16} />
-                        </div>
                     </div>
                 )}
             </div>
 
             {/* Watchlist Items */}
-            <div className="space-y-4">
+            <div className="space-y-3">
                 {watchlist.length === 0 ? (
-                    <div className="glass rounded-[1.5rem] p-10 flex flex-col items-center justify-center text-center border border-glass-border">
-                        <Activity size={32} className="text-tab-inactive mb-4" />
-                        <h4 className="text-lg font-bold mb-2">Empty Watchlist</h4>
+                    <div className="glass rounded-xl p-10 flex flex-col items-center justify-center text-center border border-glass-border">
+                        <Activity size={28} className="text-tab-inactive mb-4" />
+                        <h4 className="text-base font-bold mb-2">Empty Watchlist</h4>
                         <p className="text-tab-inactive text-sm font-medium leading-relaxed">
-                            Search for a stock or crypto ticker above to start tracking real-time prices.
+                            Search for a stock, ETF, or crypto above to start tracking prices.
                         </p>
                     </div>
                 ) : (
-                    watchlist.map((ticker) => {
+                    watchlist.filter(t => t !== "CAD=X").map((ticker) => {
                         const data = watchlistPrices[ticker] || { price: 0, change: 0 };
                         const normalizedPrice = isCAD ? data.price * fxRate : data.price;
                         const isPositive = data.change >= 0;
+                        const assetLabel = meta[ticker];
 
                         return (
-                            <div key={ticker} className="glass rounded-2xl p-4 flex items-center justify-between active:scale-[0.98] transition-transform duration-200">
-                                <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 rounded-full bg-foreground/5 flex items-center justify-center font-bold text-lg text-accent border border-glass-border">
+                            <div key={ticker} className="glass rounded-xl p-4 flex items-center justify-between border border-glass-border active:scale-[0.98] transition-transform duration-150">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-md bg-accent/15 flex items-center justify-center font-bold text-base text-accent border border-accent/20">
                                         {ticker[0]}
                                     </div>
                                     <div>
-                                        <h4 className="font-semibold text-lg leading-tight uppercase">{ticker}</h4>
+                                        <div className="flex items-center gap-2">
+                                            <h4 className="font-semibold text-base leading-tight uppercase">{ticker}</h4>
+                                            {assetLabel && (
+                                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${TAG_STYLE[assetLabel]}`}>
+                                                    {assetLabel.toUpperCase()}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <p className="text-xs text-tab-inactive font-medium">{data.price ? "Live" : "Pending..."}</p>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-3">
                                     <div className="text-right">
-                                        <p className="font-semibold text-[1.1rem] leading-tight">
-                                            {currencySymbol}{normalizedPrice ? normalizedPrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "..."}
+                                        <p className="font-semibold text-base leading-tight">
+                                            {normalizedPrice ? `${currencySymbol}${normalizedPrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}
                                         </p>
-                                        <div className={`flex items-center justify-end text-sm font-medium ${isPositive ? 'text-[#34C759]' : 'text-[#FF3B30]'}`}>
+                                        <div className={`text-xs font-medium ${isPositive ? "text-[#00e5a0]" : "text-[#ff3d57]"}`}>
                                             {isPositive ? "+" : ""}{data.change ? data.change.toFixed(2) : "0.00"}%
                                         </div>
                                     </div>
                                     <button
-                                        onClick={() => removeFromWatchlist(ticker)}
-                                        className="w-8 h-8 rounded-full bg-red-500/10 flex items-center justify-center text-red-500 hover:bg-red-500/20 active:scale-90 transition-colors"
+                                        onClick={() => handleRemove(ticker)}
+                                        className="w-7 h-7 rounded-md bg-red-500/10 flex items-center justify-center text-red-400 hover:bg-red-500/25 active:scale-90 transition-colors"
                                     >
-                                        <Trash2 size={16} />
+                                        <Trash2 size={14} />
                                     </button>
                                 </div>
                             </div>
-                        )
+                        );
                     })
                 )}
             </div>
