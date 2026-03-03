@@ -30,11 +30,12 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#000000",
+  themeColor: "#060d1a",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -50,7 +51,10 @@ export default function RootLayout({
       >
         <PortfolioProvider>
           <SwipeWrapper>
-            <main className="flex-1">
+            <main
+              className="flex-1"
+              style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
+            >
               {children}
             </main>
           </SwipeWrapper>

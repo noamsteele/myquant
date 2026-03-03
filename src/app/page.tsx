@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { TrendingUp, TrendingDown, Wallet, Activity, Box, RefreshCcw, X, Server, ArrowDownUp, Trash2, CheckCircle2 } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import { TrendingUp, TrendingDown, Wallet, Activity, Box, RefreshCcw, X, Server, ArrowDownUp, Trash2, CheckCircle2, History } from "lucide-react";
 import { usePortfolio } from "@/context/PortfolioContext";
 import {
   Treemap, ResponsiveContainer, Tooltip,
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Area, AreaChart,
+  XAxis, YAxis, CartesianGrid, Area, AreaChart, ReferenceLine,
 } from "recharts";
 
 const COLORS = ['#2979ff', '#00e5a0', '#ff9100', '#be6aff', '#ff3d57', '#00b8e0'];
@@ -50,6 +50,21 @@ export default function Dashboard() {
   const [selectedAsset, setSelectedAsset] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<"VALUE_DESC" | "VALUE_ASC" | "AZ" | "ZA" | "RETURN_DESC">("VALUE_DESC");
   const [showSortMenu, setShowSortMenu] = useState(false);
+  const [showAllTrades, setShowAllTrades] = useState(false);
+
+  // Price chart for the selected asset (30-day)
+  const [chartPrices, setChartPrices] = useState<{ date: string; price: number }[]>([]);
+  const [chartLoading, setChartLoading] = useState(false);
+
+  useEffect(() => {
+    if (!selectedAsset) { setChartPrices([]); return; }
+    setChartLoading(true);
+    fetch(`/api/chart?ticker=${selectedAsset}`)
+      .then(r => r.json())
+      .then(d => setChartPrices(d.data ?? []))
+      .catch(() => setChartPrices([]))
+      .finally(() => setChartLoading(false));
+  }, [selectedAsset]);
 
   const selectedHolding = holdings.find(h => h.ticker === selectedAsset);
 
@@ -355,6 +370,19 @@ export default function Dashboard() {
         </div>
       </section>
 
+      {/* ─── All Trades Button ─── */}
+      {trades.length > 0 && (
+        <section>
+          <button
+            onClick={() => setShowAllTrades(true)}
+            className="w-full glass rounded-xl p-4 flex items-center justify-center gap-2 border border-glass-border text-accent font-semibold text-sm hover:brightness-105 active:scale-[0.98] transition-all"
+          >
+            <History size={17} />
+            View Full Trade History
+          </button>
+        </section>
+      )}
+
       {/* ─── Asset Detail Modal ─── */}
       {selectedAsset && selectedHolding && (
         <div className="fixed inset-0 z-[100] flex items-end justify-center">
@@ -391,6 +419,71 @@ export default function Dashboard() {
                     {selectedHolding.costBasis > 0 ? ((selectedHolding.currentPrice - selectedHolding.costBasis) / selectedHolding.costBasis * 100).toFixed(2) : "0.00"}%
                   </p>
                 </div>
+              </div>
+
+              {/* 30-day Price Chart */}
+              <div className="mb-5">
+                <div className="flex justify-between items-center mb-2">
+                  <h3 className="text-xs font-bold flex items-center gap-2 text-white/80">
+                    <Activity size={14} className="text-accent" />
+                    30-Day Price
+                  </h3>
+                  <div className="flex items-center gap-3">
+                    <span className="flex items-center gap-1 text-[10px] text-tab-inactive font-semibold">
+                      <span className="inline-block w-4 h-0.5 rounded" style={{ background: selectedHolding.currentPrice >= selectedHolding.costBasis ? '#00e5a0' : '#ff3d57' }} />
+                      Price
+                    </span>
+                    <span className="flex items-center gap-1 text-[10px] text-tab-inactive font-semibold">
+                      <span className="inline-block w-4 h-0.5 rounded border-t border-dashed" style={{ borderColor: 'rgba(128,180,255,0.7)' }} />
+                      Cost Basis
+                    </span>
+                  </div>
+                </div>
+                {chartLoading ? (
+                  <div className="h-[130px] flex items-center justify-center">
+                    <div className="w-5 h-5 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+                  </div>
+                ) : chartPrices.length >= 2 ? (
+                  <div className="h-[130px] bg-white/3 rounded-lg overflow-hidden">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={chartPrices} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="priceGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor={selectedHolding.currentPrice >= selectedHolding.costBasis ? '#00e5a0' : '#ff3d57'} stopOpacity={0.18} />
+                            <stop offset="95%" stopColor={selectedHolding.currentPrice >= selectedHolding.costBasis ? '#00e5a0' : '#ff3d57'} stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <XAxis dataKey="date" tick={{ fill: 'var(--tab-inactive)', fontSize: 9 }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+                        <YAxis tick={{ fill: 'var(--tab-inactive)', fontSize: 9 }} tickLine={false} axisLine={false} width={42}
+                          tickFormatter={(v) => `$${v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v}`}
+                          domain={['auto', 'auto']}
+                        />
+                        <Tooltip
+                          formatter={(v: any) => [`$${Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 'Price']}
+                          contentStyle={{ background: '#07111f', border: '1px solid rgba(50,100,200,0.25)', borderRadius: 8, fontSize: 11 }}
+                          itemStyle={{ color: '#e8edf5' }}
+                        />
+                        <ReferenceLine
+                          y={selectedHolding.costBasis}
+                          stroke="rgba(128,180,255,0.65)"
+                          strokeDasharray="5 4"
+                          strokeWidth={1.5}
+                        />
+                        <Area
+                          type="monotone"
+                          dataKey="price"
+                          stroke={selectedHolding.currentPrice >= selectedHolding.costBasis ? '#00e5a0' : '#ff3d57'}
+                          strokeWidth={1.8}
+                          fill="url(#priceGrad)"
+                          dot={false}
+                          activeDot={{ r: 4, strokeWidth: 0 }}
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <p className="text-xs text-tab-inactive bg-white/4 rounded-lg p-3 text-center border border-white/6">No chart data available.</p>
+                )}
               </div>
 
               {/* Platform Breakdown */}
@@ -450,6 +543,50 @@ export default function Dashboard() {
               <button onClick={() => setSelectedAsset(null)} className="w-full py-3.5 bg-accent text-white rounded-lg font-bold text-base shadow-[0_4px_20px_rgba(41,121,255,0.4)] active:scale-[0.98] transition-transform">
                 Done
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── All Trades Sheet ─── */}
+      {showAllTrades && (
+        <div className="fixed inset-0 z-[110] flex items-end justify-center">
+          <div className="absolute inset-0 bg-black/65 backdrop-blur-md" onClick={() => setShowAllTrades(false)} />
+          <div className="relative bg-[#07111f] w-full max-h-[85vh] rounded-t-2xl border border-[rgba(50,100,200,0.2)] shadow-2xl flex flex-col overflow-hidden">
+            <div className="w-10 h-1 bg-white/15 rounded-full mx-auto mt-3 mb-1" />
+            <div className="flex justify-between items-center px-5 py-3">
+              <h2 className="text-base font-bold">Trade History</h2>
+              <button onClick={() => setShowAllTrades(false)} className="w-8 h-8 rounded-md bg-white/8 flex items-center justify-center text-white/60 hover:bg-white/15 transition-colors">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1 px-5 pb-5 space-y-2">
+              {[...trades]
+                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                .map((t) => (
+                  <div key={t.id} className="flex justify-between items-center bg-white/4 p-3.5 rounded-lg border border-white/6">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${t.type === 'BUY' ? 'bg-[#00e5a0]' : 'bg-[#ff3d57]'}`} />
+                      <div>
+                        <p className="font-bold text-sm">
+                          {t.ticker} &nbsp;
+                          <span className={`text-xs font-semibold ${t.type === 'BUY' ? 'text-[#00e5a0]' : 'text-[#ff3d57]'}`}>{t.type}</span>
+                        </p>
+                        <p className="text-xs text-tab-inactive">{t.quantity} shares @ ${t.price} · {t.platform}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-tab-inactive font-medium">{t.date}</p>
+                      <button
+                        onClick={() => { if (confirm('Delete this trade?')) removeTrade(t.id); }}
+                        className="w-6 h-6 rounded-md bg-red-500/10 flex items-center justify-center text-red-400 hover:bg-red-500/25 active:scale-90 transition-colors mt-1 ml-auto"
+                      >
+                        <Trash2 size={11} />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              }
             </div>
           </div>
         </div>
