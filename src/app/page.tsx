@@ -46,7 +46,7 @@ const PerfTooltip = ({ active, payload, label, currencySymbol }: any) => {
 };
 
 export default function Dashboard() {
-  const { holdings, totalValue, currency, setCurrency, currencySymbol, trades, removeTrade } = usePortfolio();
+  const { holdings, totalValue, currency, setCurrency, currencySymbol, fxRate, trades, removeTrade } = usePortfolio();
   const [selectedAsset, setSelectedAsset] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<"VALUE_DESC" | "VALUE_ASC" | "AZ" | "ZA" | "RETURN_DESC">("VALUE_DESC");
   const [showSortMenu, setShowSortMenu] = useState(false);
@@ -407,19 +407,67 @@ export default function Dashboard() {
                 </button>
               </div>
 
-              {/* Stats grid */}
-              <div className="grid grid-cols-2 gap-3 mb-5">
-                <div className="bg-white/4 rounded-lg p-4 border border-white/6">
-                  <p className="text-[10px] text-tab-inactive font-semibold uppercase tracking-wider mb-1">Total Value</p>
-                  <p className="text-base font-bold">{currencySymbol}{(selectedHolding.shares * selectedHolding.currentPrice).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                </div>
-                <div className="bg-white/4 rounded-lg p-4 border border-white/6">
-                  <p className="text-[10px] text-tab-inactive font-semibold uppercase tracking-wider mb-1">Total Return</p>
-                  <p className={`text-base font-bold ${selectedHolding.currentPrice >= selectedHolding.costBasis ? "text-[#00e5a0]" : "text-[#ff3d57]"}`}>
-                    {selectedHolding.costBasis > 0 ? ((selectedHolding.currentPrice - selectedHolding.costBasis) / selectedHolding.costBasis * 100).toFixed(2) : "0.00"}%
-                  </p>
-                </div>
-              </div>
+              {/* Stats grid — value & cost basis in both currencies */}
+              {(() => {
+                const totalUSD = currency === "USD"
+                  ? selectedHolding.shares * selectedHolding.currentPrice
+                  : (selectedHolding.shares * selectedHolding.currentPrice) / fxRate;
+                const totalCAD = currency === "CAD"
+                  ? selectedHolding.shares * selectedHolding.currentPrice
+                  : selectedHolding.shares * selectedHolding.currentPrice * fxRate;
+                const costUSD = currency === "USD" ? selectedHolding.costBasis : selectedHolding.costBasis / fxRate;
+                const costCAD = currency === "CAD" ? selectedHolding.costBasis : selectedHolding.costBasis * fxRate;
+                const returnPct = selectedHolding.costBasis > 0
+                  ? ((selectedHolding.currentPrice - selectedHolding.costBasis) / selectedHolding.costBasis * 100)
+                  : 0;
+                const isUp = returnPct >= 0;
+                const fmt = (v: number) => v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                return (
+                  <div className="grid grid-cols-2 gap-3 mb-5">
+                    {/* Total Value */}
+                    <div className="bg-white/4 rounded-lg p-4 border border-white/6 col-span-2">
+                      <p className="text-[10px] text-tab-inactive font-semibold uppercase tracking-wider mb-2">Total Value</p>
+                      <div className="flex items-end gap-3">
+                        <div>
+                          <p className="text-[11px] text-tab-inactive font-medium">USD</p>
+                          <p className="text-base font-bold">${fmt(totalUSD)}</p>
+                        </div>
+                        <div className="w-px h-8 bg-white/10" />
+                        <div>
+                          <p className="text-[11px] text-tab-inactive font-medium">CAD</p>
+                          <p className="text-base font-bold">C${fmt(totalCAD)}</p>
+                        </div>
+                      </div>
+                    </div>
+                    {/* Cost Basis */}
+                    <div className="bg-white/4 rounded-lg p-4 border border-white/6 col-span-2">
+                      <p className="text-[10px] text-tab-inactive font-semibold uppercase tracking-wider mb-2">Avg Cost / Share</p>
+                      <div className="flex items-end gap-3">
+                        <div>
+                          <p className="text-[11px] text-tab-inactive font-medium">USD</p>
+                          <p className="text-base font-bold">${fmt(costUSD)}</p>
+                        </div>
+                        <div className="w-px h-8 bg-white/10" />
+                        <div>
+                          <p className="text-[11px] text-tab-inactive font-medium">CAD</p>
+                          <p className="text-base font-bold">C${fmt(costCAD)}</p>
+                        </div>
+                      </div>
+                    </div>
+                    {/* Return & Shares */}
+                    <div className="bg-white/4 rounded-lg p-4 border border-white/6">
+                      <p className="text-[10px] text-tab-inactive font-semibold uppercase tracking-wider mb-1">Total Return</p>
+                      <p className={`text-base font-bold ${isUp ? 'text-[#00e5a0]' : 'text-[#ff3d57]'}`}>
+                        {isUp ? '+' : ''}{returnPct.toFixed(2)}%
+                      </p>
+                    </div>
+                    <div className="bg-white/4 rounded-lg p-4 border border-white/6">
+                      <p className="text-[10px] text-tab-inactive font-semibold uppercase tracking-wider mb-1">Shares Held</p>
+                      <p className="text-base font-bold">{selectedHolding.shares.toLocaleString(undefined, { maximumFractionDigits: 6 })}</p>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* 30-day Price Chart */}
               <div className="mb-5">

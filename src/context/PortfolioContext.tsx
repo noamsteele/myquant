@@ -30,6 +30,7 @@ type PortfolioContextType = {
     currency: "USD" | "CAD";
     setCurrency: (currency: "USD" | "CAD") => void;
     currencySymbol: string;
+    fxRate: number;          // live USD→CAD rate (e.g. 1.36)
     watchlist: string[];
     addToWatchlist: (ticker: string) => void;
     removeFromWatchlist: (ticker: string) => void;
@@ -162,6 +163,7 @@ export const PortfolioProvider = ({ children }: { children: React.ReactNode }) =
     }, [trades, livePrices, currency]);
 
     const totalValue = holdings.reduce((acc, curr) => acc + (curr.shares * curr.currentPrice), 0);
+    const fxRate = livePrices["CAD=X"]?.price || 1.36; // live USD→CAD rate
 
     const addToWatchlist = (ticker: string) => {
         if (!watchlist.includes(ticker.toUpperCase())) {
@@ -207,7 +209,7 @@ export const PortfolioProvider = ({ children }: { children: React.ReactNode }) =
     };
 
     return (
-        <PortfolioContext.Provider value={{ trades, holdings, totalValue, addTrade, currency, setCurrency, currencySymbol, watchlist, addToWatchlist, removeFromWatchlist, removeTrade, importData }}>
+        <PortfolioContext.Provider value={{ trades, holdings, totalValue, addTrade, currency, setCurrency, currencySymbol, fxRate, watchlist, addToWatchlist, removeFromWatchlist, removeTrade, importData }}>
             {children}
         </PortfolioContext.Provider>
     );
