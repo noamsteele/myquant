@@ -16,7 +16,14 @@ export default function BottomNav() {
     ];
 
     return (
-        <nav className="fixed bottom-0 left-0 right-0 bg-[var(--card-bg)] border-t border-[var(--glass-border)] pb-[env(safe-area-inset-bottom)] z-50" style={{ backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}>
+        <nav
+            className="fixed bottom-0 left-0 right-0 bg-[var(--card-bg)] border-t border-[var(--glass-border)] z-50"
+            style={{
+                backdropFilter: 'blur(20px)',
+                WebkitBackdropFilter: 'blur(20px)',
+                paddingBottom: 'env(safe-area-inset-bottom, 12px)',
+            }}
+        >
             <div className="flex justify-around items-stretch h-16">
                 {navItems.map((item) => {
                     const isActive = pathname === item.href;

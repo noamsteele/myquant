@@ -90,10 +90,11 @@ export default function Dashboard() {
         cumulativeInvested += t.quantity * t.price;
       } else {
         const avgCost = runningCost[ticker].shares > 0 ? runningCost[ticker].cost / runningCost[ticker].shares : 0;
+        const qtySold = Math.min(t.quantity, runningCost[ticker].shares);
         runningCost[ticker].shares = Math.max(0, runningCost[ticker].shares - t.quantity);
         runningCost[ticker].cost = runningCost[ticker].shares * avgCost;
-        // Capital returned on sell reduces invested
-        cumulativeInvested = Math.max(0, cumulativeInvested - t.quantity * t.price);
+        // Reduce invested by the cost basis of shares sold (not sell price)
+        cumulativeInvested = Math.max(0, cumulativeInvested - qtySold * avgCost);
       }
       const totalCostBasis = Object.values(runningCost).reduce((a, c) => a + c.cost, 0);
       dateMap.set(t.date, { costBasis: totalCostBasis, invested: cumulativeInvested });
