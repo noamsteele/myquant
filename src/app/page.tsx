@@ -34,10 +34,13 @@ const CustomizedContent = (props: any) => {
 /* ─── Custom tooltip for the line chart ─── */
 const PerfTooltip = ({ active, payload, label, currencySymbol }: any) => {
   if (!active || !payload?.length) return null;
+  const val = payload.find((p: any) => p.dataKey === 'value');
+  const inv = payload.find((p: any) => p.dataKey === 'invested');
   return (
     <div style={{ background: 'var(--card-bg)', border: '1px solid var(--glass-border)', backdropFilter: 'blur(20px)', borderRadius: 10, padding: '8px 14px', fontSize: 12 }}>
-      <p style={{ color: 'var(--tab-inactive)', marginBottom: 2 }}>{label}</p>
-      <p style={{ color: 'var(--foreground)', fontWeight: 700 }}>{currencySymbol}{Number(payload[0].value).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+      <p style={{ color: 'var(--tab-inactive)', marginBottom: 4, fontWeight: 600 }}>{label}</p>
+      {val && <p style={{ color: val.color, fontWeight: 700, marginBottom: 2 }}>Portfolio: {currencySymbol}{Number(val.value).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>}
+      {inv && <p style={{ color: inv.color, fontWeight: 700 }}>Invested: {currencySymbol}{Number(inv.value).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>}
     </div>
   );
 };
@@ -73,9 +76,10 @@ export default function Dashboard() {
     if (!trades.length) return [];
     const sorted = [...trades].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-    // Build per-date cumulative cost basis as a proxy for portfolio value over time
-    const dateMap = new Map<string, number>();
+    // Build running cost basis per ticker per date
+    const dateMap = new Map<string, { costBasis: number; invested: number }>();
     const runningCost: Record<string, { shares: number; cost: number }> = {};
+    let cumulativeInvested = 0;
 
     sorted.forEach(t => {
       const ticker = t.ticker.toUpperCase();
@@ -83,28 +87,28 @@ export default function Dashboard() {
       if (t.type === "BUY") {
         runningCost[ticker].shares += t.quantity;
         runningCost[ticker].cost += t.quantity * t.price;
+        cumulativeInvested += t.quantity * t.price;
       } else {
         const avgCost = runningCost[ticker].shares > 0 ? runningCost[ticker].cost / runningCost[ticker].shares : 0;
         runningCost[ticker].shares = Math.max(0, runningCost[ticker].shares - t.quantity);
         runningCost[ticker].cost = runningCost[ticker].shares * avgCost;
+        // Capital returned on sell reduces invested
+        cumulativeInvested = Math.max(0, cumulativeInvested - t.quantity * t.price);
       }
-      // Total cost basis on this date
       const totalCostBasis = Object.values(runningCost).reduce((a, c) => a + c.cost, 0);
-      dateMap.set(t.date, totalCostBasis);
+      dateMap.set(t.date, { costBasis: totalCostBasis, invested: cumulativeInvested });
     });
 
-    // Build chart series — apply live price growth factor using holdings on last point
+    // Build chart series — scale cost basis to live portfolio value, keep invested as-is
     const entries = Array.from(dateMap.entries()).sort(([a], [b]) => new Date(a).getTime() - new Date(b).getTime());
-    const lastCostBasis = entries[entries.length - 1]?.[1] ?? 0;
+    const lastCostBasis = entries[entries.length - 1]?.[1].costBasis ?? 0;
     const growthFactor = lastCostBasis > 0 ? totalValue / lastCostBasis : 1;
 
-    return entries.map(([date, costBasis], i) => {
-      // Scale older cost basis points proportionally; most recent maps to live totalValue
-      const factor = i === entries.length - 1 ? 1 : growthFactor;
-      const val = i === entries.length - 1 ? totalValue : costBasis * factor;
+    return entries.map(([date, data], i) => {
+      const val = i === entries.length - 1 ? totalValue : data.costBasis * growthFactor;
       const d = new Date(date);
       const label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-      return { date: label, value: parseFloat(val.toFixed(2)) };
+      return { date: label, value: parseFloat(val.toFixed(2)), invested: parseFloat(data.invested.toFixed(2)) };
     });
   }, [trades, totalValue]);
 
@@ -181,14 +185,30 @@ export default function Dashboard() {
       {/* ─── Cumulative Performance Line Chart ─── */}
       {performanceData.length >= 2 && (
         <section className="glass rounded-xl p-5 border border-glass-border">
-          <h3 className="text-[11px] font-bold uppercase tracking-widest text-tab-inactive mb-4">Performance</h3>
-          <div className="h-[160px] w-full">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-[11px] font-bold uppercase tracking-widest text-tab-inactive">Performance</h3>
+            <div className="flex items-center gap-3">
+              <span className="flex items-center gap-1 text-[10px] font-semibold text-tab-inactive">
+                <span className="inline-block w-5 h-0.5 rounded" style={{ background: perfColor }} />
+                Portfolio
+              </span>
+              <span className="flex items-center gap-1 text-[10px] font-semibold text-tab-inactive">
+                <span className="inline-block w-5 h-0.5 rounded border-t border-dashed" style={{ borderColor: 'rgba(128,180,255,0.7)' }} />
+                Invested
+              </span>
+            </div>
+          </div>
+          <div className="h-[170px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={performanceData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="perfGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={perfColor} stopOpacity={0.25} />
+                    <stop offset="5%" stopColor={perfColor} stopOpacity={0.2} />
                     <stop offset="95%" stopColor={perfColor} stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="investedGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#80b4ff" stopOpacity={0.12} />
+                    <stop offset="95%" stopColor="#80b4ff" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--glass-border)" vertical={false} />
@@ -201,6 +221,18 @@ export default function Dashboard() {
                   width={52}
                 />
                 <Tooltip content={<PerfTooltip currencySymbol={currencySymbol} />} />
+                {/* Invested line — behind portfolio */}
+                <Area
+                  type="monotone"
+                  dataKey="invested"
+                  stroke="rgba(128,180,255,0.7)"
+                  strokeWidth={1.5}
+                  strokeDasharray="5 4"
+                  fill="url(#investedGrad)"
+                  dot={false}
+                  activeDot={{ r: 4, fill: '#80b4ff', strokeWidth: 0 }}
+                />
+                {/* Portfolio value line — on top */}
                 <Area
                   type="monotone"
                   dataKey="value"
