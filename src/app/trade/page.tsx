@@ -3,6 +3,15 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { usePortfolio } from "@/context/PortfolioContext";
+import { Bitcoin, BarChart2 } from "lucide-react";
+
+type SearchResult = {
+    symbol: string;
+    name: string;
+    thumb?: string;
+    exchange?: string;
+    type: "stock" | "crypto";
+};
 
 export default function TradeInput() {
     const router = useRouter();
@@ -16,44 +25,50 @@ export default function TradeInput() {
     const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
     const [platform, setPlatform] = useState("Questrade");
 
-    const [searchResults, setSearchResults] = useState<{ id: string, name: string, symbol: string, thumb: string }[]>([]);
+    const [assetType, setAssetType] = useState<"stock" | "crypto">("stock");
+    const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
     const [isSearching, setIsSearching] = useState(false);
     const [showDropdown, setShowDropdown] = useState(false);
 
-    // CoinGecko Search API Debounce
+    // Reset search results when toggling asset type
+    useEffect(() => {
+        setSearchResults([]);
+        setShowDropdown(false);
+    }, [assetType]);
+
+    // Unified search with debounce
     useEffect(() => {
         const fetchAssets = async () => {
-            if (ticker.trim().length < 2) {
+            const q = ticker.trim();
+            if (q.length < 1) {
                 setSearchResults([]);
                 setShowDropdown(false);
                 return;
             }
-
-            // Avoid refetching if the exact ticker was just selected
-            if (!showDropdown && searchResults.some(r => r.symbol.toUpperCase() === ticker.toUpperCase())) return;
+            // Skip re-fetch if the user just selected an item
+            if (!showDropdown && searchResults.some(r => r.symbol.toUpperCase() === q.toUpperCase())) return;
 
             setIsSearching(true);
             try {
-                const res = await fetch(`https://api.coingecko.com/api/v3/search?query=${ticker}`);
+                const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&type=${assetType}`);
                 const data = await res.json();
-                if (data && data.coins) {
-                    setSearchResults(data.coins.slice(0, 5)); // Limit to top 5
-                    setShowDropdown(true);
-                }
+                setSearchResults(data.results ?? []);
+                setShowDropdown((data.results ?? []).length > 0);
             } catch (err) {
-                console.error("CoinGecko search failed:", err);
+                console.error("Search failed:", err);
             } finally {
                 setIsSearching(false);
             }
         };
 
-        const timeoutId = setTimeout(fetchAssets, 400); // 400ms debounce
-        return () => clearTimeout(timeoutId);
-    }, [ticker, showDropdown, searchResults]);
+        const id = setTimeout(fetchAssets, 350);
+        return () => clearTimeout(id);
+    }, [ticker, assetType]);
 
-    const handleSelect = (symbol: string) => {
-        setTicker(symbol.toUpperCase());
+    const handleSelect = (result: SearchResult) => {
+        setTicker(result.symbol.toUpperCase());
         setShowDropdown(false);
+        setSearchResults([]);
     };
 
     const handleSubmit = (e?: React.FormEvent) => {
@@ -67,7 +82,7 @@ export default function TradeInput() {
             price: parseFloat(price),
             tradeCurrency,
             date,
-            platform
+            platform,
         });
 
         router.push("/");
@@ -81,28 +96,44 @@ export default function TradeInput() {
             </header>
 
             {/* Buy / Sell Segmented Control */}
-            <div className="glass p-1 rounded-xl flex mb-6">
+            <div className="glass p-1 rounded-xl flex mb-4 border border-glass-border">
                 <button
                     onClick={() => setTradeType("BUY")}
-                    className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all duration-200 ${tradeType === "BUY" ? "bg-accent text-white shadow-md" : "text-tab-inactive transparent"
-                        }`}
+                    className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all duration-200 ${tradeType === "BUY" ? "bg-accent text-white shadow-md" : "text-tab-inactive"}`}
                 >
                     Buy
                 </button>
                 <button
                     onClick={() => setTradeType("SELL")}
-                    className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all duration-200 ${tradeType === "SELL" ? "bg-red-500 text-white shadow-md" : "text-tab-inactive transparent"
-                        }`}
+                    className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all duration-200 ${tradeType === "SELL" ? "bg-red-500 text-white shadow-md" : "text-tab-inactive"}`}
                 >
                     Sell
                 </button>
             </div>
 
+            {/* Stock / Crypto Toggle */}
+            <div className="glass p-1 rounded-xl flex mb-5 border border-glass-border">
+                <button
+                    onClick={() => setAssetType("stock")}
+                    className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all duration-200 flex items-center justify-center gap-1.5 ${assetType === "stock" ? "bg-foreground/10 text-foreground shadow" : "text-tab-inactive"}`}
+                >
+                    <BarChart2 size={14} />
+                    Stock / ETF
+                </button>
+                <button
+                    onClick={() => setAssetType("crypto")}
+                    className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all duration-200 flex items-center justify-center gap-1.5 ${assetType === "crypto" ? "bg-foreground/10 text-foreground shadow" : "text-tab-inactive"}`}
+                >
+                    <Bitcoin size={14} />
+                    Crypto
+                </button>
+            </div>
+
             <form onSubmit={handleSubmit} className="space-y-4">
-                {/* Ticker Input */}
-                <div className="glass rounded-xl p-4 relative z-20 overflow-visible">
+                {/* Ticker Search */}
+                <div className="glass rounded-xl p-4 relative z-20 overflow-visible border border-glass-border">
                     <label className="block text-xs font-semibold text-tab-inactive uppercase tracking-wider mb-2">
-                        Asset Ticker
+                        {assetType === "stock" ? "Stock / ETF Ticker" : "Crypto Ticker"}
                     </label>
                     <div className="relative">
                         <input
@@ -113,7 +144,7 @@ export default function TradeInput() {
                                 setShowDropdown(true);
                             }}
                             onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
-                            placeholder="e.g. AAPL, BTC"
+                            placeholder={assetType === "stock" ? "e.g. AAPL, MSFT, SPY" : "e.g. BTC, ETH, SOL"}
                             className="w-full bg-transparent text-xl font-bold placeholder-foreground/20 focus:outline-none uppercase"
                         />
                         {isSearching && (
@@ -123,17 +154,23 @@ export default function TradeInput() {
 
                     {/* Autocomplete Dropdown */}
                     {showDropdown && searchResults.length > 0 && (
-                        <div className="absolute left-0 right-0 top-[110%] bg-[#f2f2f7] dark:bg-[#1C1C1E] border border-glass-border rounded-xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] max-h-60 overflow-y-auto overflow-hidden text-foreground">
-                            {searchResults.map((coin) => (
+                        <div className="absolute left-0 right-0 top-[110%] bg-[#f0f2f7] dark:bg-[#0d1a30] border border-glass-border rounded-lg shadow-2xl max-h-64 overflow-y-auto z-50">
+                            {searchResults.map((result) => (
                                 <div
-                                    key={coin.id}
-                                    onClick={() => handleSelect(coin.symbol)}
-                                    className="flex items-center gap-3 p-3 hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer border-b border-glass-border last:border-0"
+                                    key={result.symbol}
+                                    onClick={() => handleSelect(result)}
+                                    className="flex items-center gap-3 px-4 py-3 hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer border-b border-glass-border last:border-0"
                                 >
-                                    {coin.thumb && <img src={coin.thumb} alt={coin.symbol} className="w-6 h-6 rounded-full" />}
-                                    <div className="flex flex-col">
-                                        <span className="font-bold text-sm uppercase">{coin.symbol}</span>
-                                        <span className="text-xs text-tab-inactive">{coin.name}</span>
+                                    {result.thumb ? (
+                                        <img src={result.thumb} alt={result.symbol} className="w-7 h-7 rounded-full flex-shrink-0" />
+                                    ) : (
+                                        <div className="w-7 h-7 rounded-md bg-accent/15 flex items-center justify-center text-accent font-bold text-xs flex-shrink-0">
+                                            {result.symbol[0]}
+                                        </div>
+                                    )}
+                                    <div className="min-w-0">
+                                        <p className="font-bold text-sm uppercase leading-tight">{result.symbol}</p>
+                                        <p className="text-xs text-tab-inactive truncate">{result.name}{result.exchange ? ` · ${result.exchange}` : ""}</p>
                                     </div>
                                 </div>
                             ))}
@@ -143,7 +180,7 @@ export default function TradeInput() {
 
                 {/* Quantity and Price Row */}
                 <div className="flex gap-4">
-                    <div className="glass rounded-xl p-4 flex-1">
+                    <div className="glass rounded-xl p-4 flex-1 border border-glass-border">
                         <label className="block text-xs font-semibold text-tab-inactive uppercase tracking-wider mb-2">
                             Quantity
                         </label>
@@ -156,14 +193,14 @@ export default function TradeInput() {
                             className="w-full bg-transparent text-xl font-bold placeholder-foreground/20 focus:outline-none"
                         />
                     </div>
-                    <div className="glass rounded-xl p-4 flex-1 flex flex-col justify-between relative">
+                    <div className="glass rounded-xl p-4 flex-1 flex flex-col justify-between relative border border-glass-border">
                         <div className="flex justify-between items-start mb-2">
                             <label className="block text-xs font-semibold text-tab-inactive uppercase tracking-wider">
-                                Price per unit
+                                Price / unit
                             </label>
-                            <div className="flex gap-1 bg-foreground/10 p-0.5 rounded-lg -mt-2 -mr-2">
-                                <button type="button" onClick={() => setTradeCurrency("USD")} className={`text-[10px] px-1.5 py-0.5 rounded-md transition-colors ${tradeCurrency === "USD" ? 'bg-background shadow-sm font-bold text-foreground' : 'text-tab-inactive hover:text-foreground'}`}>USD</button>
-                                <button type="button" onClick={() => setTradeCurrency("CAD")} className={`text-[10px] px-1.5 py-0.5 rounded-md transition-colors ${tradeCurrency === "CAD" ? 'bg-background shadow-sm font-bold text-foreground' : 'text-tab-inactive hover:text-foreground'}`}>CAD</button>
+                            <div className="flex gap-1 bg-foreground/10 p-0.5 rounded-md -mt-1 -mr-1">
+                                <button type="button" onClick={() => setTradeCurrency("USD")} className={`text-[10px] px-1.5 py-0.5 rounded transition-colors ${tradeCurrency === "USD" ? "bg-background shadow-sm font-bold text-foreground" : "text-tab-inactive"}`}>USD</button>
+                                <button type="button" onClick={() => setTradeCurrency("CAD")} className={`text-[10px] px-1.5 py-0.5 rounded transition-colors ${tradeCurrency === "CAD" ? "bg-background shadow-sm font-bold text-foreground" : "text-tab-inactive"}`}>CAD</button>
                             </div>
                         </div>
                         <div className="flex items-center">
@@ -180,9 +217,9 @@ export default function TradeInput() {
                     </div>
                 </div>
 
-                {/* Date and Platform Row */}
-                <div className="space-y-4">
-                    <div className="glass rounded-xl p-4 flex items-center justify-between">
+                {/* Date and Platform */}
+                <div className="space-y-3">
+                    <div className="glass rounded-xl p-4 flex items-center justify-between border border-glass-border">
                         <label className="text-sm font-semibold">Date</label>
                         <input
                             type="date"
@@ -191,24 +228,22 @@ export default function TradeInput() {
                             className="bg-transparent text-right font-medium focus:outline-none text-accent"
                         />
                     </div>
-
-                    <div className="glass rounded-xl p-4 flex items-center justify-between">
+                    <div className="glass rounded-xl p-4 flex items-center justify-between border border-glass-border">
                         <label className="text-sm font-semibold">Platform</label>
                         <input
                             type="text"
                             value={platform}
                             onChange={(e) => setPlatform(e.target.value)}
-                            placeholder="e.g. Binance"
+                            placeholder="e.g. Questrade"
                             className="bg-transparent text-right font-medium focus:outline-none text-accent w-1/2"
                         />
                     </div>
                 </div>
 
-                {/* Submit Button */}
+                {/* Submit */}
                 <button
                     type="submit"
-                    className={`w-full py-4 mt-8 rounded-xl text-white font-bold text-lg shadow-lg active:scale-[0.98] transition-transform duration-200 ${tradeType === "BUY" ? "bg-accent shadow-accent/30" : "bg-red-500 shadow-red-500/30"
-                        }`}
+                    className={`w-full py-4 mt-4 rounded-xl text-white font-bold text-lg shadow-lg active:scale-[0.98] transition-transform duration-200 ${tradeType === "BUY" ? "bg-accent shadow-accent/30" : "bg-red-500 shadow-red-500/30"}`}
                 >
                     Confirm {tradeType === "BUY" ? "Purchase" : "Sale"}
                 </button>
