@@ -46,7 +46,7 @@ const PerfTooltip = ({ active, payload, label, currencySymbol }: any) => {
 };
 
 export default function Dashboard() {
-  const { holdings, totalValue, currency, setCurrency, currencySymbol, fxRate, trades, removeTrade } = usePortfolio();
+  const { holdings, totalValue, currency, setCurrency, currencySymbol, fxRate, trades, removeTrade, realizedPnL, unrealizedPnL, pnlByTicker } = usePortfolio();
   const [selectedAsset, setSelectedAsset] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<"VALUE_DESC" | "VALUE_ASC" | "AZ" | "ZA" | "RETURN_DESC">("VALUE_DESC");
   const [showSortMenu, setShowSortMenu] = useState(false);
@@ -198,7 +198,33 @@ export default function Dashboard() {
         )}
       </section>
 
-      {/* ─── Cumulative Performance Line Chart ─── */}
+      {/* ─── P&L Summary Cards ─── */}
+      {trades.length > 0 && (
+        <section className="grid grid-cols-2 gap-3">
+          {/* Realized P&L */}
+          <div className="glass rounded-xl p-4 border border-glass-border relative overflow-hidden isolate">
+            <div className="absolute -top-6 -right-6 w-20 h-20 rounded-full blur-2xl -z-10 pointer-events-none"
+              style={{ background: realizedPnL >= 0 ? 'rgba(0,229,160,0.12)' : 'rgba(255,61,87,0.12)' }} />
+            <p className="text-[9px] font-bold uppercase tracking-widest text-tab-inactive mb-1.5">Realized P&amp;L</p>
+            <p className={`text-base font-bold leading-tight ${realizedPnL >= 0 ? 'text-[#00e5a0]' : 'text-[#ff3d57]'
+              }`}>
+              {realizedPnL >= 0 ? '+' : ''}{currencySymbol}{Math.abs(realizedPnL).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
+            <p className="text-[9px] text-tab-inactive font-medium mt-0.5">From closed positions</p>
+          </div>
+          {/* Unrealized P&L */}
+          <div className="glass rounded-xl p-4 border border-glass-border relative overflow-hidden isolate">
+            <div className="absolute -top-6 -right-6 w-20 h-20 rounded-full blur-2xl -z-10 pointer-events-none"
+              style={{ background: unrealizedPnL >= 0 ? 'rgba(0,229,160,0.12)' : 'rgba(255,61,87,0.12)' }} />
+            <p className="text-[9px] font-bold uppercase tracking-widest text-tab-inactive mb-1.5">Unrealized P&amp;L</p>
+            <p className={`text-base font-bold leading-tight ${unrealizedPnL >= 0 ? 'text-[#00e5a0]' : 'text-[#ff3d57]'
+              }`}>
+              {unrealizedPnL >= 0 ? '+' : ''}{currencySymbol}{Math.abs(unrealizedPnL).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
+            <p className="text-[9px] text-tab-inactive font-medium mt-0.5">Open positions</p>
+          </div>
+        </section>
+      )}
       {performanceData.length >= 2 && (
         <section className="glass rounded-xl p-5 border border-glass-border">
           <div className="flex justify-between items-center mb-4">
@@ -422,6 +448,8 @@ export default function Dashboard() {
                   : 0;
                 const isUp = returnPct >= 0;
                 const fmt = (v: number) => v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                const assetPnL = pnlByTicker[selectedAsset] ?? { realizedPnL: 0, unrealizedPnL: 0 };
+                const pnlFmt = (v: number) => `${v >= 0 ? '+' : ''}${currencySymbol}${Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
                 return (
                   <div className="grid grid-cols-2 gap-3 mb-5">
                     {/* Total Value */}
@@ -464,6 +492,26 @@ export default function Dashboard() {
                     <div className="bg-white/4 rounded-lg p-4 border border-white/6">
                       <p className="text-[10px] text-tab-inactive font-semibold uppercase tracking-wider mb-1">Shares Held</p>
                       <p className="text-base font-bold">{selectedHolding.shares.toLocaleString(undefined, { maximumFractionDigits: 6 })}</p>
+                    </div>
+                    {/* Realized P&L */}
+                    <div className="bg-white/4 rounded-lg p-4 border border-white/6 relative overflow-hidden isolate">
+                      <div className="absolute -top-4 -right-4 w-16 h-16 rounded-full blur-xl -z-10 pointer-events-none"
+                        style={{ background: assetPnL.realizedPnL >= 0 ? 'rgba(0,229,160,0.15)' : 'rgba(255,61,87,0.15)' }} />
+                      <p className="text-[10px] text-tab-inactive font-semibold uppercase tracking-wider mb-1">Realized P&amp;L</p>
+                      <p className={`text-base font-bold ${assetPnL.realizedPnL >= 0 ? 'text-[#00e5a0]' : 'text-[#ff3d57]'}`}>
+                        {pnlFmt(assetPnL.realizedPnL)}
+                      </p>
+                      <p className="text-[9px] text-tab-inactive font-medium mt-0.5">Closed trades</p>
+                    </div>
+                    {/* Unrealized P&L */}
+                    <div className="bg-white/4 rounded-lg p-4 border border-white/6 relative overflow-hidden isolate">
+                      <div className="absolute -top-4 -right-4 w-16 h-16 rounded-full blur-xl -z-10 pointer-events-none"
+                        style={{ background: assetPnL.unrealizedPnL >= 0 ? 'rgba(0,229,160,0.15)' : 'rgba(255,61,87,0.15)' }} />
+                      <p className="text-[10px] text-tab-inactive font-semibold uppercase tracking-wider mb-1">Unrealized P&amp;L</p>
+                      <p className={`text-base font-bold ${assetPnL.unrealizedPnL >= 0 ? 'text-[#00e5a0]' : 'text-[#ff3d57]'}`}>
+                        {pnlFmt(assetPnL.unrealizedPnL)}
+                      </p>
+                      <p className="text-[9px] text-tab-inactive font-medium mt-0.5">Open position</p>
                     </div>
                   </div>
                 );

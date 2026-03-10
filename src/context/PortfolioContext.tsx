@@ -22,6 +22,11 @@ export type Holding = {
     change: number; // simulated percentage
 };
 
+export type PnLData = {
+    realizedPnL: number;   // profit/loss from closed (sold) positions
+    unrealizedPnL: number; // profit/loss from open positions at current market price
+};
+
 type PortfolioContextType = {
     trades: Trade[];
     holdings: Holding[];
@@ -36,6 +41,10 @@ type PortfolioContextType = {
     removeFromWatchlist: (ticker: string) => void;
     removeTrade: (id: string) => void;
     importData: (jsonData: any) => boolean;
+    // P&L
+    realizedPnL: number;          // cumulative realized P&L across all tickers
+    unrealizedPnL: number;        // cumulative unrealized P&L across all open positions
+    pnlByTicker: Record<string, PnLData>; // per-ticker breakdown
 };
 
 const PortfolioContext = createContext<PortfolioContextType | undefined>(undefined);
@@ -114,14 +123,17 @@ export const PortfolioProvider = ({ children }: { children: React.ReactNode }) =
         });
     };
 
-    // Calculate holdings based on trades
-    const holdings: Holding[] = React.useMemo(() => {
+    // Calculate holdings + P&L based on trades
+    const { holdings, pnlByTicker } = React.useMemo(() => {
         const map = new Map<string, { shares: number, totalCost: number }>();
+        // Track realized P&L per ticker (USD)
+        const realizedMap: Record<string, number> = {};
         const latestFx = livePrices["CAD=X"]?.price || 1.35;
 
         trades.forEach(trade => {
             const ticker = trade.ticker.toUpperCase();
             const current = map.get(ticker) || { shares: 0, totalCost: 0 };
+            if (!realizedMap[ticker]) realizedMap[ticker] = 0;
 
             const fxToUSD = trade.tradeCurrency === "CAD" ? (1 / latestFx) : 1;
             const normalizedPrice = trade.price * fxToUSD;
@@ -132,8 +144,11 @@ export const PortfolioProvider = ({ children }: { children: React.ReactNode }) =
             } else if (trade.type === "SELL") {
                 // Average cost algorithm
                 const prevAvgCost = current.shares > 0 ? (current.totalCost / current.shares) : 0;
-                current.shares -= trade.quantity;
-                if (current.shares < 0) current.shares = 0; // prevent negative bounds if incorrect data entry
+                const qtySold = Math.min(trade.quantity, current.shares);
+                // Realized P&L = (sell price - avg cost) * qty sold
+                realizedMap[ticker] += (normalizedPrice - prevAvgCost) * qtySold;
+                current.shares -= qtySold;
+                if (current.shares < 0) current.shares = 0;
                 current.totalCost = current.shares * prevAvgCost;
             }
             map.set(ticker, current);
@@ -142,13 +157,23 @@ export const PortfolioProvider = ({ children }: { children: React.ReactNode }) =
         const fxRate = currency === "CAD" ? (livePrices["CAD=X"]?.price || 1.35) : 1;
 
         const result: Holding[] = [];
-        map.forEach((data, ticker) => {
-            if (data.shares <= 0.000001) return; // ignore completely sold or floating-point err positions
-            const costBasis = data.totalCost / data.shares;
+        const pnlByTicker: Record<string, PnLData> = {};
 
-            // Try live prices, fallback to mock, fallback to dummy
+        map.forEach((data, ticker) => {
+            const costBasis = data.shares > 0.000001 ? data.totalCost / data.shares : 0;
             const priceData = livePrices[ticker] || MOCK_PRICES[ticker] || { name: ticker, price: costBasis || 1.0, change: 0.0 };
 
+            // Unrealized P&L (USD)
+            const unrealizedUSD = data.shares > 0.000001
+                ? (priceData.price - costBasis) * data.shares
+                : 0;
+
+            pnlByTicker[ticker] = {
+                realizedPnL: (realizedMap[ticker] || 0) * fxRate,
+                unrealizedPnL: unrealizedUSD * fxRate,
+            };
+
+            if (data.shares <= 0.000001) return; // ignore completely sold positions for holdings list
             result.push({
                 ticker,
                 name: priceData.name,
@@ -159,11 +184,16 @@ export const PortfolioProvider = ({ children }: { children: React.ReactNode }) =
             });
         });
 
-        return result.sort((a, b) => (b.shares * b.currentPrice) - (a.shares * a.currentPrice));
+        const sortedHoldings = result.sort((a, b) => (b.shares * b.currentPrice) - (a.shares * a.currentPrice));
+        return { holdings: sortedHoldings, pnlByTicker };
     }, [trades, livePrices, currency]);
 
     const totalValue = holdings.reduce((acc, curr) => acc + (curr.shares * curr.currentPrice), 0);
     const fxRate = livePrices["CAD=X"]?.price || 1.36; // live USD→CAD rate
+
+    // Aggregate P&L across all tickers
+    const realizedPnL = Object.values(pnlByTicker).reduce((sum, p) => sum + p.realizedPnL, 0);
+    const unrealizedPnL = Object.values(pnlByTicker).reduce((sum, p) => sum + p.unrealizedPnL, 0);
 
     const addToWatchlist = (ticker: string) => {
         if (!watchlist.includes(ticker.toUpperCase())) {
@@ -209,7 +239,7 @@ export const PortfolioProvider = ({ children }: { children: React.ReactNode }) =
     };
 
     return (
-        <PortfolioContext.Provider value={{ trades, holdings, totalValue, addTrade, currency, setCurrency, currencySymbol, fxRate, watchlist, addToWatchlist, removeFromWatchlist, removeTrade, importData }}>
+        <PortfolioContext.Provider value={{ trades, holdings, totalValue, addTrade, currency, setCurrency, currencySymbol, fxRate, watchlist, addToWatchlist, removeFromWatchlist, removeTrade, importData, realizedPnL, unrealizedPnL, pnlByTicker }}>
             {children}
         </PortfolioContext.Provider>
     );
